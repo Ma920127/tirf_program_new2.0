@@ -73,7 +73,7 @@ def estimate_robust_gaussian_drift(displacements, interval_idx, drifts_dir, max_
 
 # Drift tracking
 def track_and_plot_drift(loader, image_stack, fsc, mpath, path, maxf=1500, minf=500,
-                        average_frame=10, per_n=200, pairing_threshold=1.5, channel = 'green'):
+                        average_frame=10, ratio_thres=1.5, per_n=200, pairing_threshold=1.5, channel = 'green'):
     previous_coords = None
     drift_history = []
     interval_idx = 0
@@ -84,15 +84,16 @@ def track_and_plot_drift(loader, image_stack, fsc, mpath, path, maxf=1500, minf=
     anchors = np.arange(0, image_stack.shape[0], per_n)
     if anchors[-1] != image_stack.shape[0] - 1:
         anchors = np.append(anchors, image_stack.shape[0] - 1)
-
+    print(channel)
     for anchor in anchors:
         im2, _ = loader.gen_dimg(anchor=anchor, mpath=mpath, maxf=maxf, minf=minf,
                                  laser=channel, average_frame=average_frame)
-        blobs = loader.det_blob(plot=False, fsc=fsc, thres=7, r=3, ratio_thres=1.5)
+        blobs = loader.det_blob(plot=False, fsc=fsc, thres=7, r=3, ratio_thres = ratio_thres)
         current_coords = np.array([b.get_coord()[:2] + b.shift[0] for b in blobs])
-
+        #add channel support
         if previous_coords is not None and len(previous_coords) > 0 and len(current_coords) > 0:
             dist, idx = cKDTree(current_coords).query(previous_coords, distance_upper_bound=pairing_threshold)
+            print(idx)
             valid = dist < pairing_threshold
 
             if np.any(valid):
@@ -174,7 +175,7 @@ def apply_drift_correction(target_channel, path, time_reference, time_target, dr
 
 
 
-def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, channel, per_n = 200, pairing_threshold = 1.5):
+def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, channel, per_n = 200, pairing_threshold = 1.5, ratio_thres = 1.5):
     time_dict = {
     'green': gs.image_datas[0],
     'red': gs.image_datas[1],
@@ -192,7 +193,9 @@ def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, cha
         path = path,
         maxf = maxf,
         minf = minf,
+        channel=channel,
         average_frame = average_frame,
+        ratio_thres = ratio_thres,
         per_n = per_n,
         pairing_threshold = pairing_threshold
     )

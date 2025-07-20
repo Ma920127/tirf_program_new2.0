@@ -5,6 +5,8 @@ import numpy as np
 from scipy.ndimage import uniform_filter1d as uf
 import os
 import subprocess
+from win32com.client import Dispatch
+import pythoncom
 
 class Fret_kernel:
     
@@ -17,9 +19,21 @@ class Fret_kernel:
         self.ow = proc_config['overwrite']
         self.proc_config = proc_config
     
+    def is_path_open_in_explorer(self, path):
+        path = os.path.abspath(path).lower()
+        pythoncom.CoInitialize()
+        shell = Dispatch("Shell.Application")
+        for window in shell.Windows():
+            try:
+                folder = window.Document.Folder.Self.Path
+                if folder.lower() == path:
+                    return True
+            except Exception:
+                continue
+        return False
 
         
-    def auto_fret(self, plot=True, fit=True, fit_b = True, GFP_plot =True, fsc = None):
+    def auto_fret(self, plot=True, fit=True, fit_b = True, GFP_plot =True,  GFP_hist = True, fsc = None):
                 
                 n = self.ow    
                 os.makedirs(self.path + r'/FRET', exist_ok = True)
@@ -52,7 +66,16 @@ class Fret_kernel:
                 if GFP_plot == True:
                     GFPr = GFP(path)
                     GFPr.plot(self.lag_g, snap_time_g)
-                subprocess.Popen(f'explorer "{path}"')
+                
+                if GFP_hist == True:
+                    GFPr = GFP(path)
+                    GFPr.plot_hist(self.lag_g, snap_time_b)
+
+                if self.is_path_open_in_explorer(path):
+                    print(f"'{path}' already opened.")
+                else:
+                    subprocess.Popen(f'explorer "{path}"')
+                
 
                 try:
                     fsc.set("fret_progress", str(1))

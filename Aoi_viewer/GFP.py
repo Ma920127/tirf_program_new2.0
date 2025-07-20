@@ -4,6 +4,8 @@ from tqdm import tqdm
 import matplotlib as mpl
 import os
 from scipy.ndimage import uniform_filter1d as uf
+from matplotlib.cm import get_cmap
+from matplotlib.colors import Normalize
 
 
 class GFP:
@@ -73,3 +75,52 @@ class GFP:
         plt.savefig(self.path +r'\\gfp_scatter\\all_heat.tif', dpi = 1200, format = 'tif')
         plt.savefig(self.path +r'\\gfp_scatter\\all_heat.eps', dpi = 1200, format = 'eps')
         #plt.show()
+    
+    def plot_hist(self, lag, snap_time_b):
+        file_path = os.path.join(self.path, 'data.npz')
+        data = np.load(file_path)['bb']
+
+        # Apply uniform filter and select snapshot window
+        avg_b = uf(data, size=lag, mode='nearest')[:, snap_time_b[0]:snap_time_b[1]]
+
+        # Prepare directory for output
+        hist_dir = os.path.join(self.path, 'gfp_hist')
+        os.makedirs(hist_dir, exist_ok=True)
+
+        # Apply style settings
+        mpl.rcParams.update({
+            'font.family': 'Arial',
+            'font.size': 5,
+            'axes.linewidth': 0.5,
+            'xtick.major.width': 0.5,
+            'ytick.major.width': 0.5,
+            'xtick.labelsize': 5,
+            'ytick.labelsize': 5,
+            'figure.figsize': (480 / 72, 270 / 72),  # Convert to inches
+        })
+
+        # Select only traces where self.selected == 1
+        avg_b_selected = avg_b[self.selected == 1].flatten()
+
+        # Plot histogram
+        counts, bin_edges = np.histogram(avg_b_selected, bins= 50, density = True, range=(-1000, 25000))
+
+        # Normalize counts for color mapping
+        norm = Normalize(vmin=counts.min(), vmax=counts.max())
+        cmap = get_cmap('Blues_r')  # Choose any matplotlib colormap
+
+        # Plot
+        plt.close()
+        fig, ax = plt.subplots()
+        for i in range(len(counts)):
+            color = cmap(norm(counts[i]))
+            ax.bar(bin_edges[i], counts[i], width=bin_edges[i+1] - bin_edges[i],
+                    color=color, align='edge', edgecolor='black')
+
+        ax.set_xlim(-1000, 25000)
+        ax.set_xlabel('GFP Intensity')
+        plt.tight_layout()
+
+        # Save in high-res TIFF and EPS formats
+        plt.savefig(os.path.join(hist_dir, 'gfp_hist.tif'), dpi=1200, format='tif')
+        plt.savefig(os.path.join(hist_dir, 'gfp_hist.eps'), dpi=1200, format='eps')

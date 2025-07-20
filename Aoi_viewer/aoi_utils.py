@@ -140,7 +140,7 @@ def cal_blob_intensity(loader, coord_list, path, image_datas, maxf, minf, fsc):
 
 def cal_FRET_utils(path, ps, ow, snap_time_g, snap_time_b, red, red_time, red_intensity,
                    green, green_time, green_intensity, leakage_g, leakage_b, f_lag, lag_b,
-                   fit, fit_b, GFP_plot, fsc):
+                   fit, fit_b, GFP_plot, GFP_hist, fsc):
     proc_config = {
         'leakage_g': leakage_g,
         'leakage_b': leakage_b,
@@ -161,7 +161,7 @@ def cal_FRET_utils(path, ps, ow, snap_time_g, snap_time_b, red, red_time, red_in
         'overwrite': ow,
     }
     kernel = Fret_kernel(proc_config)
-    fret_g = kernel.auto_fret(plot=0, fit=fit, fit_b=fit_b, GFP_plot=GFP_plot, fsc=fsc)
+    fret_g = kernel.auto_fret(plot=0, fit=fit, fit_b=fit_b, GFP_plot=GFP_plot, GFP_hist = GFP_hist, fsc=fsc)
     gs.fret_g = fret_g
 
 def save_config(num, config_data):

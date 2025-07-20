@@ -86,6 +86,7 @@ def register_update_fig(app, fsc):
             fsc.set("load_progress", "0")
             gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc)
             gs.blob_disable = False
+            gs.fret_g = None
             frame = 0
             fsc.set("stage", "Image Loaded")
             logging.info("Image load in %.3f sec", time.perf_counter()-step_start)
@@ -139,7 +140,7 @@ def register_update_fig(app, fsc):
             gs.coord_list = [b.get_coord() for b in gs.blob_list]
             coord_array = np.array(gs.coord_list) 
             current_fig = draw_blobs(current_fig, coord_array, gs.dr, reverse)
-            logging.info("Blob fitting for {ch} with {channel} laser in %.3f sec", time.perf_counter()-step_start)
+            logging.info(f"Blob fitting for {ch_dict[selector]} with {channel} laser in %.3f sec", time.perf_counter()-step_start)
 
         if "openp" in changed_id:
             subprocess.Popen(f'explorer "{path}"')
@@ -157,6 +158,7 @@ def register_update_fig(app, fsc):
                     maxf = maxf, 
                     minf = minf, 
                     average_frame = average_frame, 
+                    ratio_thres = ratio_thres,
                     channel = channel, 
                     per_n = per_n, 
                     pairing_threshold = pairing_threshold)
@@ -265,7 +267,12 @@ def register_update_fig(app, fsc):
             minf = np.round(np.min(smooth_image))
             
         current_fig.update_traces(zmax=maxf, zmin=minf, selector=dict(type="heatmap"))
-        current_fig = update_fret_labels(current_fig, frame)
+        if channel == 'green':
+            current_fig = update_fret_labels(current_fig, frame)
+        else:
+            current_fig.update_traces(customdata= [], selector=dict(name='blobs_r'))
+            current_fig.update_traces(customdata= [], selector=dict(name='blobs_g'))
+
 
 
         slider_max = channel_dict[channel].shape[0]

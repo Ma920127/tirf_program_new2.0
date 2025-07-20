@@ -20,6 +20,7 @@ def register_cal_FRET(app, fsc):
             State("fit", "value"),
             State("fit_b", "value"),
             State("gfp_plot", "value"),
+            State("gfp_hist", "value"),
             State("snap_time_g", "value"),
             State("snap_time_b", "value"),
             State("red_time", "value"),
@@ -29,12 +30,12 @@ def register_cal_FRET(app, fsc):
         ]
     )
     def cal_FRET(n_clicks, path, ps, ow, leakage_g, leakage_b, f_lag, lag_b, red, green,
-                 fit, fit_b, gfp_plot, snap_time_g, snap_time_b, red_time, green_time,
+                 fit, fit_b, gfp_plot, gfp_hist, snap_time_g, snap_time_b, red_time, green_time,
                  red_intensity, green_intensity):
         fsc.set("fret_progress", 0)
         cal_FRET_utils(path, ps, ow, snap_time_g, snap_time_b, red, red_time, red_intensity,
                       green, green_time, green_intensity, leakage_g, leakage_b, f_lag, lag_b,
-                      fit, fit_b, gfp_plot, fsc)
+                      fit, fit_b, gfp_plot, gfp_hist, fsc)
         fsc.set("stage", "Idle")
         return None
 

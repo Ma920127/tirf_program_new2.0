@@ -30,6 +30,8 @@ def get_fret_tab(config):
                         daq.ToggleSwitch(id='fit', value = config['fit'], color='green'),
                         html.Div('GFP plot', style={"margin-left": "20px", "margin-right": "10px"}),
                         daq.ToggleSwitch(id='gfp_plot', value= config['gfp_plot'] , color='green'),
+                        html.Div('GFP hist', style={"margin-left": "20px", "margin-right": "10px"}),
+                        daq.ToggleSwitch(id='gfp_hist', value= False , color='green'),
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div('leakage'),
@@ -41,11 +43,11 @@ def get_fret_tab(config):
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Snap time"),
-                        html.Div(dcc.RangeSlider(0, 20, value = config['snap_time_b'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_g'), style={'width': '600px'}),
+                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['snap_time_b'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_g'), style={'width': '600px'}),
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Red time"),
-                        html.Div(dcc.RangeSlider(0, 20, value = config['red_time'], tooltip={"placement": "bottom", "always_visible": True}, id='red_time'), style={'width': '600px'})
+                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['red_time'], tooltip={"placement": "bottom", "always_visible": True}, id='red_time'), style={'width': '600px'})
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                 ])
             ], color="light", outline=True, style={'width': '750px', 'padding': 5}),
@@ -68,11 +70,11 @@ def get_fret_tab(config):
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Snap time"),
-                        html.Div(dcc.RangeSlider(0, 20, value = config['snap_time_b'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_b'), style={'width': '600px'}),
+                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['snap_time_b'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_b'), style={'width': '600px'}),
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Green time"),
-                        html.Div(dcc.RangeSlider(0, 20, value = config['green_time'], tooltip={"placement": "bottom", "always_visible": True}, id='green_time'), style={'width': '600px'})
+                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['green_time'], tooltip={"placement": "bottom", "always_visible": True}, id='green_time'), style={'width': '600px'})
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                 ])
             ], color="light", outline=True, style={'width': '750px', 'padding': 5}),

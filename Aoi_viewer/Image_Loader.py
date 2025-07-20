@@ -348,7 +348,7 @@ class Image_Loader():
                     'red' :  dframe_r
                     }
 
-
+        print(laser)
         dframe = laser_dict[laser] 
 
 
@@ -356,7 +356,7 @@ class Image_Loader():
         self.M = np.load(mpath + r'\map_g_r.npy')
         self.Mb = np.load(mpath + r'\map_g_b.npy')
 
-
+        print(dframe)
 
         left_image  = dframe[0:self.height,0:170]
         right_image = dframe[0:self.height,171:341]
