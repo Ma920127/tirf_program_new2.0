@@ -163,7 +163,7 @@ def show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, strided):
     z = np.concatenate(z_list, axis=1)
     
     # Update the figure's layout with the new data and color scale
-    fig_blob['layout']['coloraxis']['colorscale'] = 'gray'
+    fig_blob['layout']['coloraxis']['colorscale'] = 'viridis'
     fig_blob.update_traces(zmax=maxf, zmin=minf, selector=dict(type='heatmap'))
     fig_blob['data'][0]['z'] = z
     fig_blob['layout']['coloraxis']['cmax'] = maxf

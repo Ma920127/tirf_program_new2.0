@@ -356,4 +356,14 @@ def change_trace(changed_id, event, i, N_traces, fig):
         except:
             i = 0
         fig.layout.shapes = []
+
+    fig.update_layout(annotations=[dict(
+        text = f'Trace {i}',
+       xref="paper", yref="paper",
+        x=0.5, y=1.02,  
+        xanchor='center', yanchor='top',
+        showarrow=False,
+        font=dict(size=20, family='Arial')
+    )])
+
     return i, fig

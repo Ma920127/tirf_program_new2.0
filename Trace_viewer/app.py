@@ -162,6 +162,7 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     ##change trace##
     i, fig = change_trace(changed_id, event, i, N_traces, fig)
     
+    
 
     ##select good bad##
 

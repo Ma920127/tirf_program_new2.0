@@ -40,7 +40,7 @@ def init_fig():
 
         
     fig.layout = dict(xaxis1 = dict(domain = [0, 0.9]),
-                    margin = dict(t = 50),
+                    margin = dict(t = 120),
                     hovermode = 'closest',
                     bargap = 0,
                     uirevision = True,
@@ -49,7 +49,17 @@ def init_fig():
                     yaxis2 = dict(domain = [0.26, 0.5]),
                     yaxis3 = dict(domain = [0.51, 0.75]),
                     yaxis4 = dict(domain = [0.76, 1.00]),
-                    height = (1000)
+                    height = (1000),
+                    annotations=[
+                        dict(
+                            text="Trace 0",  # <-- Your title text
+                            xref="paper", yref="paper",
+                            x=0.5, y=1.02,  # Centered above the entire figure
+                            xanchor='center', yanchor='top',
+                            showarrow=False,
+                            font=dict(size=20, family='Arial')
+                        )
+                    ],
                     )
 
     fig.update_layout(
@@ -118,7 +128,7 @@ def init_fig():
 
    
 
-    fig_blob = px.imshow(np.zeros((9, 54)), color_continuous_scale='gray', zmin = 0, zmax = 128)
+    fig_blob = px.imshow(np.zeros((9, 54)), zmin = 0, zmax = 128)
     fig_blob.update_layout(
     xaxis=dict(
         showline=True,

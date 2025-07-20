@@ -116,6 +116,7 @@ def sl_bkps(changed_id, path, bkps, mode):
     if 'load_bkps' in changed_id:
         try:
             bkps = dict(np.load(path + r'/breakpoints.npz', allow_pickle=True))
+            #print(bkps['fret_g'])
         except:
             print('File not found')
     return bkps
