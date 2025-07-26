@@ -118,7 +118,7 @@ class Blob():
             # Assuming there's only one large blob in the image, we take the largest one
             # or the first region if there's exactly one. Adjust logic if multiple blobs are present.
             if not props:
-                return "no blob", 0.0
+                return "no blob", 10.0
 
             # Find region with the maximum area
             region = max(props, key=lambda r: r.area)
