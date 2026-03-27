@@ -117,10 +117,14 @@ def move_blobs(coord_list, selector, step, changed_id):
 
     return coord_list
 
-def load_path(thres, path, fsc):
+def load_path(thres, path, fsc, camera_size=1024):
     time_params = cal(path)
-    loader = Image_Loader(0, thres, path, *time_params, 1)
+    loader = Image_Loader(0, thres, path, *time_params, 1, camera_size=camera_size)
     image_datas = loader.load_image(fsc)
+    image_width = loader.width
+    if image_width != camera_size:
+        raise ValueError(f"SIZE MISMATCH: Expected {camera_size}, got {image_width}")
+        
     image_g = loader.image_g
     image_r = loader.image_r
     image_b = loader.image_b
@@ -164,35 +168,64 @@ def cal_FRET_utils(path, ps, ow, snap_time_g, snap_time_b, red, red_time, red_in
     fret_g = kernel.auto_fret(plot=0, fit=fit, fit_b=fit_b, GFP_plot=GFP_plot, GFP_hist = GFP_hist, fsc=fsc)
     gs.fret_g = fret_g
 
-def save_config(num, config_data):
-    os.makedirs(r'configs', exist_ok=True)
-    with open(f'configs\\{num}.json', 'w') as fp:
-        json.dump(config_data, fp)
-
-def load_config(num, init=False):
+    
+def load_config(num, subfolder):
+    # 1. Get the exact folder where aoi_utils.py lives
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 2. Build the path strictly from that base directory
+    file_path = os.path.join(base_dir, "configs", str(subfolder), f"{num}.json")
+    
+    # 3. Load the file
+    if not os.path.exists(file_path):
+        print(f"❌ Still missing! Looked at: {file_path}")
+        return None
+        
     try:
-        import os
-        print("Current working directory:", os.getcwd())
-        with open(f'configs\\{num}.json', 'r') as fp:
-            config_data = json.load(fp)
-        #return list(config_data.values())
-        return dict(config_data)
-    except:
-        print('fail')
-        raise PreventUpdate
-    return None
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ Corrupted JSON: {e}")
+        return None
+    
+
+def load_config(num, subfolder):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, "configs", str(subfolder), f"{num}.json")
+    
+    if not os.path.exists(file_path):
+        return None
+        
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def save_config(num, config_data, subfolder="1024"):
+    folder_path = os.path.join("configs", str(subfolder))
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        
+    file_path = os.path.join(folder_path, f"{num}.json")
+    with open(file_path, 'w') as f:
+        json.dump(config_data, f, indent=4)
+
 
 def to_dict(b):
-    b.dframe_r = None
-    b.dframe_b = None
-    b.dframe_g = None
-    b.dcombined_image = None    
-    b.params = None        
-    b = b.__dict__
-    for k in b.keys():
-        if isinstance(b[k], np.ndarray):
-            b[k] = b[k].tolist()
-    return b
+    # Make a copy of the dictionary so we don't destroy the live object
+    b_dict = b.__dict__.copy()
+    b_dict['dframe_r'] = None
+    b_dict['dframe_b'] = None
+    b_dict['dframe_g'] = None
+    b_dict['dcombined_image'] = None
+    b_dict['params'] = None
+    
+    for k in b_dict.keys():
+        if isinstance(b_dict[k], np.ndarray):
+            b_dict[k] = b_dict[k].tolist()
+    return b_dict
 
 def save_aoi_utils(data, file):
     with open(file, "w") as outfile:
@@ -207,3 +240,36 @@ def load_aoi_utils(file):
         b.read_dict(b_dict) 
         blob_list.append(b)
     return blob_list
+
+
+
+
+# old version
+# def to_dict(b):
+#     b.dframe_r = None
+#     b.dframe_b = None
+#     b.dframe_g = None
+#     b.dcombined_image = None    
+#     b.params = None        
+#     b = b.__dict__
+#     for k in b.keys():
+#         if isinstance(b[k], np.ndarray):
+#             b[k] = b[k].tolist()
+#     return b
+
+# def save_config(num, config_data):
+#     os.makedirs(r'configs', exist_ok=True)
+#     with open(f'configs\\{num}.json', 'w') as fp:
+#         json.dump(config_data, fp)
+
+# def load_config(num, init=False):
+#     try:
+#         import os
+#         print("Current working directory:", os.getcwd())
+#         with open(f'configs\\{num}.json', 'r') as fp:
+#             config_data = json.load(fp)
+#         #return list(config_data.values())
+#         return dict(config_data)
+#     except:
+#         print('fail')
+#         raise PreventUpdate

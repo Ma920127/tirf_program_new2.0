@@ -389,7 +389,7 @@ app.layout = html.Div([
             State('path', 'value'),
             State('mpath', 'value'),
             State("plot_circle", 'value'),
-            State('thres', 'value'),
+            # State('thres', 'value'),
             State("snap_time_g", "value"),
             State("red_time", "value"),
             State("auto", "n_clicks"),
@@ -548,7 +548,7 @@ def update_fig(clickData, relayout, blob, up, down, left, right, frame, anchor, 
 #Load Config
 @app.callback(
         output = [
-        Output('thres', 'value'),
+        # Output('thres', 'value'),
         Output('mpath', 'value'),
         Output('average_frame', 'value'),
         Output('ratio_thres', 'value'),
@@ -579,7 +579,7 @@ def update_fig(clickData, relayout, blob, up, down, left, right, frame, anchor, 
         savec = Input('savec', 'n_clicks'),
         autoscale = Input('autoscale', 'n_clicks'),
         config_data = dict(
-        thres = Input('thres', 'value'),
+        # thres = Input('thres', 'value'),
         mpath = Input('mpath', 'value'),
         average_frame = Input('average_frame', 'value'),
         ratio_thres = Input('ratio_thres', 'value'),

@@ -1,15 +1,12 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
-
 from aoi_utils import load_config
-
 from layout.blob_tab import get_blob_tab
 from layout.fret_tab import get_fret_tab
 
-config = load_config(1)
-    
 
 def make_layout(fig):
+    config = load_config(1, "1024")
     layout = html.Div([
         # Hidden store to hold all extra state; initial state can be adjusted as needed.
         dcc.Store(
@@ -22,31 +19,49 @@ def make_layout(fig):
         ),
         dbc.Row([
             dbc.Col([
+            # ONE master wrapper for Tabs -> Graph -> Slider
+            html.Div([
+                
+                # 1. The Tabs
+                dcc.Tabs(
+                    id="graph-size-tabs",
+                    value="1024",
+                    children=[
+                        dcc.Tab(label="1024 x 1024", value="1024"),
+                        dcc.Tab(label="512 x 512", value="512"),
+                    ],
+                    style={'width': '800px', 'padding': 5}
+                ),
+                
+                # 2. The Graph
                 dcc.Graph(
                     id="graph",
-                    figure = fig,
-                    style={'width': 1024, 'height': 1024},
-                    config={'scrollZoom': True, 'modebar_remove': ['box select', 'lasso select']}
+                    figure=fig,
+                    config={'scrollZoom': True, 'modebar_remove': ['box select', 'lasso select']},
+                    style={'width': '1000px', 'height': '1000px'} # Locked size
                 ),
+                
+                # 3. The Slider and Input (Moved inside the same vertical wrapper)
                 html.Div([
                     html.Div(
                         dcc.Slider(
                             0, 0, 1,
                             value=0,
                             updatemode='drag',
-                            tooltip={"placement": "bottom", "always_visible": False},
+                            tooltip={"placement": "top", "always_visible": True},
                             marks=None,
                             id='frame_slider'
                         ),
-                        style={'width': 900}
+                        style={'flex': '1', 'paddingBottom': '15px'} # Lets the slider take up the remaining width nicely
                     ),
                     dcc.Input(
                         value=0, id="anchor", type="text",
-                        placeholder="",
-                        style={'textAlign': 'center'},
+                        style={'textAlign': 'center', 'marginLeft': '10px', 'paddingBottom': '15px'},
                         size='3', debounce=True
                     )
-                ], style={"padding": 5, 'display': 'flex', 'flex-direction': 'row'}),
+                ], style={'width': '800px', 'marginTop': '15px', 'display': 'flex', 'flexDirection': 'row', 'alignItems': 'center'})
+                
+            ], style={'display': 'flex', 'flexDirection': 'column', 'alignItems': 'center'}),
             ]),
             dbc.Col([
                 dcc.Tabs(
@@ -76,7 +91,7 @@ def make_layout(fig):
                         labelStyle={'width': '100%'}
                     ),
                     html.Button('Save Config', id='savec', className="btn btn-outline-primary")
-                ], style={'padding': 20, 'display': 'flex', 'flex-direction': 'row'})
+                ], style={'padding': 20, 'display': 'flex', 'flexDirection': 'row'})
             ]),
         ], align="center")
     ])

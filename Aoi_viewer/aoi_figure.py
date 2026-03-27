@@ -14,6 +14,7 @@ def create_initial_figure(image_g, minf, maxf, radius):
     )
 )
     fig.update_layout(
+        margin=dict(r=120),
         xaxis=dict(
             showline=True,
             range=(0, image_g.shape[2]),
@@ -22,11 +23,11 @@ def create_initial_figure(image_g, minf, maxf, radius):
         yaxis=dict(
             showline=True,
             range=(image_g.shape[1], 0),
-            autorange=False
+            autorange=False,
+            scaleanchor="x",
+            scaleratio=1
         ),
-        width=1024,
-        height=1024,
-        autosize=False,
+        autosize=True,
         uirevision=True,
         dragmode='pan'
     )

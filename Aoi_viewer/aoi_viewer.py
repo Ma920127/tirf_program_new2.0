@@ -9,7 +9,6 @@ from aoi_callbacks.callback_log import register_update_log
 from aoi_callbacks.callback_cal_FRET import register_cal_FRET
 from aoi_callbacks.callback_auto import register_auto
 import logging
-import numpy as np
 
 
 # Create the shared cache object and initialize progress values

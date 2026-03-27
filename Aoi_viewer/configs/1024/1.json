@@ -1,0 +1,39 @@
+{
+    "thres": 7,
+    "mpath": "C:\\Users\\genem\\Desktop\\Mapping\\20250809",
+    "average_frame": 10,
+    "ratio_thres": 1.5,
+    "minf": 476,
+    "maxf": 1252,
+    "channel": "green",
+    "radius": 3,
+    "leakage_g": 0.08,
+    "leakage_b": 0.3,
+    "f_lag": 2,
+    "lag_b": 2,
+    "snap_time_g": [
+        0,
+        70
+    ],
+    "snap_time_b": [
+        0,
+        70
+    ],
+    "red_intensity": 800,
+    "red_time": [
+        0,
+        20
+    ],
+    "red": false,
+    "green_intensity": 3000,
+    "green_time": [
+        0,
+        0
+    ],
+    "green": false,
+    "fit": false,
+    "fit_b": false,
+    "gfp_plot": false,
+    "preserve_selected": false, 
+    "overwrite": 0
+}

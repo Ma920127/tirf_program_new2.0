@@ -15,7 +15,7 @@ def register_update_progress(app, fsc):
         ],
         Trigger("interval", "n_intervals")
     )
-    def update_progress(self):
+    def update_progress(n):
         load_prog = fsc.get("load_progress")
         blob_prog = fsc.get("progress")
         cal_prog = fsc.get("cal_progress")

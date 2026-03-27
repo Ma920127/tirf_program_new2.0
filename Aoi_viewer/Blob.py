@@ -3,6 +3,7 @@ import lmfit
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from skimage.morphology import h_maxima
+import os
 
 class Blob():
     
@@ -54,31 +55,99 @@ class Blob():
         
         return [y1, x1]
 
+    def map_coord(self, image_shape):
+        """
+        Dynamically maps coordinates based on the total width of the sensor.
+        Works if image_shape is (H, W) or (Frames, H, W).
+        """
+        # Always get the very last dimension (Width)
+        total_width = image_shape[-1]
 
-    def map_coord(self):
-        self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
-        self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 342)
-        self.coords[1] = [round(self.org_y), round(self.org_x) + 171]
-
-    def check_bound(self):
-
-        r = self.r
-
-        # check original boundary
-        if (self.org_x - r) < 1 or (self.org_x + r) > 170 or (self.org_y - r) < 1 or (self.org_y + r) > 511:
-            self.quality = 0
-
-        # check red
-        if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > 170 or (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > 510:
-            self.quality = 0
+        if total_width == 512:
+            self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
+            self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 342)
+            self.coords[1] = [round(self.org_y), round(self.org_x) + 171]
+        elif total_width == 1024:
+            self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
+            self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 684)
+            self.coords[1] = [round(self.org_y), round(self.org_x) + 342]
+            # Need change
+            
+        # old version
+        # channel_w = total_width // 3
         
-        # check green
-        if (self.coords[1][1] - r) < 173 or (self.coords[1][1] + r) > 340 or (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > 510:
-            self.quality = 0
+        # # Red Channel (Left)
+        # self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
+        
+        # # Blue Channel (Right) - Shift is exactly 2/3 of total width
+        # self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = channel_w * 2)
+        
+        # # Green Channel (Middle) - Shift is exactly 1/3 of total width
+        # self.coords[1] = [round(self.org_y), round(self.org_x) + channel_w]
 
-        #check red
-        if (self.coords[2][1] - r - 1) < 342 or (self.coords[2][1] + r + 1) > 511 or (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > 510:
-            self.quality = 0
+
+    def check_bound(self, image_shape):
+        """
+        image_shape is a tuple (height, width) e.g., (1024, 1024) or (512, 512)
+        """
+        h, w = image_shape[-2:]
+        r = self.r
+        if w == 512:
+            # check original boundary
+            if (self.org_x - r) < 1 or (self.org_x + r) > 170 or (self.org_y - r) < 1 or (self.org_y + r) > 511:
+                self.quality = 0
+
+            # check red
+            if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > 170 or (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > 510:
+                self.quality = 0
+            
+            # check green
+            if (self.coords[1][1] - r) < 173 or (self.coords[1][1] + r) > 340 or (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > 510:
+                self.quality = 0
+
+            #check red
+            if (self.coords[2][1] - r - 1) < 342 or (self.coords[2][1] + r + 1) > 511 or (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > 510:
+                self.quality = 0
+
+        elif w == 1024:
+            if (self.org_x - r) < 1 or (self.org_x + r) > 340 or (self.org_y - r) < 1 or (self.org_y + r) > 1023:
+                self.quality = 0
+
+            # check red
+            if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > 340 or (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > 1022:
+                self.quality = 0
+            
+            # check green
+            if (self.coords[1][1] - r) < 342 or (self.coords[1][1] + r) > 682 or (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > 1022:
+                self.quality = 0
+
+            #check blue
+            if (self.coords[2][1] - r - 1) < 684 or (self.coords[2][1] + r + 1) > 1023 or (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > 1022:
+                self.quality = 0
+            #Maybe need change 
+
+        # old version
+        # channel_w = w // 3
+        # # 1. Check Original/Red Channel Boundary (0 to channel_w)
+        # if (self.org_x - r) < 1 or (self.org_x + r) > (channel_w - 1) or \
+        #    (self.org_y - r) < 1 or (self.org_y + r) > (h - 1):
+        #     self.quality = 0
+
+        # # 2. Check Red Mapping (Coords[0])
+        # if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > (channel_w - 1) or \
+        #    (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > (h - 2):
+        #     self.quality = 0
+        
+        # # 3. Check Green Mapping (Coords[1]) (channel_w to 2*channel_w)
+        # if (self.coords[1][1] - r) < (channel_w + 2) or (self.coords[1][1] + r) > (2 * channel_w - 2) or \
+        #    (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > (h - 2):
+        #     self.quality = 0
+
+        # # 4. Check Blue Mapping (Coords[2]) (2*channel_w to w)
+        # if (self.coords[2][1] - r - 1) < (2 * channel_w + 2) or (self.coords[2][1] + r + 1) > (w - 1) or \
+        #    (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > (h - 2):
+        #     self.quality = 0
+
 
     def check_max(self, dcombined_image, ratio_thres):
         if self.quality == 0:
@@ -105,6 +174,8 @@ class Blob():
             """
             # Step 1: Threshold the image to get a binary mask
             # If your images are well-contrasted, you can use Otsu's method or a fixed threshold
+            if image.max() == image.min():
+                return "no blob", 10.0  # Image is perfectly flat, skip Otsu
             thresh_val = filters.threshold_otsu(image)
             binary = image > thresh_val
             
@@ -224,9 +295,14 @@ class Blob():
 
     def check_fit(self, ratio_thres):
         for ch in range(0, 3):
+            min_sig = min(self.sigma[ch])
+            # Prevent division by zero if the fit hit the absolute 0 lower bound
+            if min_sig == 0:
+                min_sig = 1e-9 
             #c1 = (self.redchi[ch] <  redchi_thres or (self.sigma[ch][0] < 3.6 and self.sigma[ch][1] < 3.6)) 
             #c2 = self.redchi[ch] <  redchi_thres * 2
-            c3 = ((max(self.sigma[ch]) / min(self.sigma[ch])) < (max(1, ratio_thres) / min(1, ratio_thres))) or (not np.any(self.sigma[ch]))
+            c3 = ((max(self.sigma[ch]) / min_sig) < (max(1, ratio_thres) / min(1, ratio_thres))) or (not np.any(self.sigma[ch]))
+
             if not(c3):
                 self.quality = 0
 
@@ -251,8 +327,9 @@ class Blob():
 
         axes[0].imshow(dframe_g[yr-r:yr+r+1, xr-r:xr+r+1], cmap='Greys_r', vmin=0, vmax=128)        
         axes[1].imshow(dframe_g[yg-r:yg+r+1, xg-r:xg+r+1], cmap='Greys_r', vmin=0, vmax=128)
-        axes[2].imshow(dframe_b[yb-r:yb+r+1, xb-r:xb+r+1], cmap='Greys_r', vmin=0, vmax=160)  
-        plt.savefig(cpath+f'\\{i}.tif', dpi=50)
+        axes[2].imshow(dframe_b[yb-r:yb+r+1, xb-r:xb+r+1], cmap='Greys_r', vmin=0, vmax=160) 
+        os.makedirs(cpath, exist_ok=True)
+        plt.savefig(cpath+f'\\{i}.tif', dpi=50) 
         plt.close()
 
     def get_coord(self):
@@ -263,34 +340,3 @@ class Blob():
     def update_coord(self, coords):
         self.coords = np.array(coords[:len(self.coords.flatten())]).reshape(self.coords.shape)
         self.shift = np.array(coords[len(self.coords.flatten()):]).reshape(self.shift.shape)
-
-
-            
-
-
-
-
-
-
-        
-        
-
-
-       
-
-
-            
-
-        
-
-    
-        
-
-    
-
-
-
-
-
-    
-

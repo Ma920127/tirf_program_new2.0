@@ -3,15 +3,14 @@ import numpy as np
 import subprocess
 import time
 import logging
-import plotly.graph_objects as go
 import os
 from tqdm import tqdm
 from dash import callback_context, no_update
-from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Output, Input, State
 from aoi_utils import draw_blobs, move_blobs, update_blobs_coords, load_path, cal_blob_intensity, save_aoi_utils, load_aoi_utils, update_fret_labels
 from cal_drift import cal_drift
 from global_state import global_state
+from aoi_figure import create_initial_figure
 
 def register_update_fig(app, fsc):
     @app.callback(
@@ -55,7 +54,8 @@ def register_update_fig(app, fsc):
             Input("cal_intensity", "n_clicks"),
             Input("openp", "n_clicks"),
             Input("configs", "value"),
-            Input("aoi_mode", "value")
+            Input("aoi_mode", "value"),
+            Input("graph-size-tabs", "value")
         ],
         [
             State("ratio_thres", "value"),
@@ -71,20 +71,49 @@ def register_update_fig(app, fsc):
             State("auto", "n_clicks")
         ],
     )
+
     def update_fig(clickData, relayout, blob, up, down, left, right, fit_gauss, frame, anchor,
                    average_frame, loadp, minf, maxf, reverse, channel, cal_drift_bt, load_drift, cal_intensity,
-                   openp, configs, aoi_mode, ratio_thres, radius, selector,
+                   openp, configs, aoi_mode, graph_size_tab, ratio_thres, radius, selector,
                    move_step, path, mpath, plot, thres, per_n, pairing_threshold, auto):
-        
+        # print("🖼️ UPDATE FIG FIRED! 🖼️")
         gs = global_state
         current_fig = gs.fig
         step_start = time.perf_counter()
 
-        changed_id = [p['prop_id'] for p in callback_context.triggered][0]
+        # Grab the size from the tab (e.g., "512" or "1024")
+        camera_size = int(graph_size_tab) if graph_size_tab else 1024
+
+        # 1. Figure out what triggered the callback
+        ctx = callback_context
+        if not ctx.triggered:
+            changed_id = 'No clicks yet'
+        else:
+            changed_id = ctx.triggered[0]['prop_id']
+
+        # 2. Check if the TAB was the thing that got clicked
+        if 'graph-size-tabs' in changed_id:
+            
+            # Instantly reset ALL global arrays and lists to the new size
+            gs.set_camera_size(camera_size)
+            
+            # Make a totally blank array of that size so the axes update
+            dummy_image = np.zeros((1, camera_size, camera_size))
+            
+            # Rebuild the figure with the new axes
+            new_fig = create_initial_figure(dummy_image, minf, maxf, radius)
+            gs.fig = new_fig
+            
+            # Return exactly 16 items! No graph_style here.
+            return (new_fig, no_update, no_update, no_update, no_update, 
+                    no_update, no_update, no_update, no_update, no_update, 
+                    no_update, no_update, no_update, no_update, no_update, no_update)
         
+
         if "loadp" in changed_id:
             fsc.set("load_progress", "0")
-            gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc)
+            gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc, camera_size = camera_size)
+            current_fig = create_initial_figure(gs.image_g, minf, maxf, radius)
             gs.blob_disable = False
             gs.fret_g = None
             frame = 0
@@ -93,11 +122,14 @@ def register_update_fig(app, fsc):
             step_start = time.perf_counter()
 
 
+        # 3. SET BASE ARRAYS USING THE PRIORITIZED CAMERA SIZE
+        # ---------------------------------------------------------
         channel_dict = {
-            "green": gs.image_g if gs.image_g is not None else np.zeros((1,512,512)),
-            "red": gs.image_r if gs.image_r is not None else np.zeros((1,512,512)),
-            "blue": gs.image_b if gs.image_b is not None else np.zeros((1,512,512))
+            "green": gs.image_g if gs.image_g is not None else np.zeros((1, camera_size, camera_size)),
+            "red": gs.image_r if gs.image_r is not None else np.zeros((1, camera_size, camera_size)),
+            "blue": gs.image_b if gs.image_b is not None else np.zeros((1, camera_size, camera_size))
         }
+
 
         if "blob" in changed_id:
             fsc.set("progress", 0)
@@ -111,16 +143,18 @@ def register_update_fig(app, fsc):
             logging.info("Blob detection in %.3f sec", time.perf_counter()-step_start)
             step_start = time.perf_counter()
 
-        for move_button in ["up", "down", "left", "right"]:
-            if move_button in changed_id:
-                coord_array = np.array(gs.coord_list) if gs.coord_list else np.empty((0,))
-                coord_array = move_blobs(coord_array, selector, int(move_step), changed_id)
-                gs.coord_list = coord_array.tolist()
-                update_blobs_coords(gs.blob_list, coord_array)
+        if any(btn in changed_id for btn in ["up", "down", "left", "right"]):
+            coord_array = np.array(gs.coord_list) if gs.coord_list else np.empty((0,))
+            # Extract the specific direction that was clicked
+            direction = changed_id.split('.')[0]
+            coord_array = move_blobs(coord_array, selector, int(move_step), direction)
+            gs.coord_list = coord_array.tolist()
+            update_blobs_coords(gs.blob_list, coord_array)
 
-                current_fig = draw_blobs(current_fig, coord_array, gs.dr if gs.dr is not None else radius, reverse)
-                logging.info("Movement %s in %.3f sec", move_button, time.perf_counter()-step_start)
-                step_start = time.perf_counter()
+            current_fig = draw_blobs(current_fig, coord_array, gs.dr if gs.dr is not None else radius, reverse)
+            logging.info("Movement %s in %.3f sec", direction, time.perf_counter()-step_start)
+            step_start = time.perf_counter()
+
         if 'fit_gauss' in changed_id:
 
             gs.loader.gen_dimg(anchor = anchor, mpath = mpath, maxf = maxf, minf = minf, laser = channel, average_frame = average_frame)
@@ -197,7 +231,7 @@ def register_update_fig(app, fsc):
                 except Exception as e:
                     logging.exception("Error during relayout: %s", e)
 
-            if isinstance(clickData, dict):
+            if isinstance(clickData, dict): #maybe can add new tool(add new blob)
                 if clickData["points"][0]["curveNumber"] in [1,2,3]:
                     if aoi_mode == 0:
                         remove_id = clickData["points"][0]["pointNumber"]
@@ -262,10 +296,7 @@ def register_update_fig(app, fsc):
         smooth_image = np.average(channel_dict[channel][start_idx:end_idx], axis=0)
         current_fig.data[0].z = smooth_image
 
-        if "autoscale" in changed_id:
-            maxf = np.round(np.max(smooth_image))
-            minf = np.round(np.min(smooth_image))
-            
+
         current_fig.update_traces(zmax=maxf, zmin=minf, selector=dict(type="heatmap"))
         if channel == 'green':
             current_fig = update_fret_labels(current_fig, frame)
@@ -280,9 +311,13 @@ def register_update_fig(app, fsc):
         r_max = max(channel_dict["red"].shape[0]-1, 0)
         snap_b_max = max(channel_dict["blue"].shape[0]-1, 0)
         g_max = max(channel_dict["green"].shape[0]-1, 0)
-        anchor = min(int(frame), channel_dict[channel].shape[0])
+        current_max_frame = channel_dict[channel].shape[0]
+        anchor = min(int(frame), current_max_frame - 1) if current_max_frame > 0 else 0
+        # anchor = min(int(frame), channel_dict[channel].shape[0])
+        # AI
+        
         aoi_num = len(gs.coord_list)
-        auto_state = no_update if fsc.get("mode") != "auto" else auto + 1
+        auto_state = no_update if fsc.get("mode") != "auto" else (auto or 0) + 1
 
         gs.fig = current_fig
 

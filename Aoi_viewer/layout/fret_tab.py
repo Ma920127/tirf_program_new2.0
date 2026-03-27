@@ -14,9 +14,9 @@ def get_fret_tab(config):
                             children=dbc.Button(id='FRET', n_clicks=0, outline=True, color="dark", className="bi bi-play-fill")
                         ),
                         html.Div('Preserve selected', style={"margin-left": "20px", "margin-right": "10px"}),
-                        daq.ToggleSwitch(id='ps', value = config['preserve_selected'], color='green'),
+                        daq.ToggleSwitch(id='preserve_selected', value=config.get('preserve_selected', False), color='green'),
                         html.Div('Folder', style={"margin-left": "20px", "margin-right": "10px"}),
-                        dcc.Input(value = config['overwrite'], id='ow', type='number', step=1, placeholder="", style={'textAlign': 'center', 'width': '40px'})
+                        dcc.Input(value = config.get('overwrite', 0), id='overwrite', type='number', step=1, placeholder="", style={'textAlign': 'center', 'width': '40px'})
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row', 'align-items': 'center'})
                 ])
             ], color="light", outline=True, style={'width': '750px', 'padding': 5}),
@@ -43,7 +43,7 @@ def get_fret_tab(config):
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Snap time"),
-                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['snap_time_b'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_g'), style={'width': '600px'}),
+                        html.Div(dcc.RangeSlider(0, 20, step = 1, marks = None, value = config['snap_time_g'], tooltip={"placement": "bottom", "always_visible": True}, id='snap_time_g'), style={'width': '600px'}),
                     ], style={'padding': 10, 'display': 'flex', 'flex-direction': 'row'}),
                     html.Div([
                         html.Div("Red time"),

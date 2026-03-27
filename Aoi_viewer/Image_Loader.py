@@ -18,8 +18,8 @@ import os
 
 class Image_Loader():
     
-    def __init__(self, n_pro, thres, path, g_length, r_length, b_length, g_start, r_start, b_start, bac_mode):
-        
+    def __init__(self, n_pro, thres, path, g_length, r_length, b_length, g_start, r_start, b_start, bac_mode, camera_size=1024):
+        self.camera_size = camera_size # Save it to the class
         self.thres = thres
         self.path = path
         self.path_g = path+r'\g'
@@ -40,7 +40,7 @@ class Image_Loader():
         self.image_r = None
         self.image_b = None
         self.M = None
-        self.M_b = None
+        self.Mb = None
         self.b_exists = None
         self.r_exists = None
         self.bac_b = None
@@ -180,14 +180,14 @@ class Image_Loader():
 
         
         nframes_true = 0
-        self.width = 512
-        self.height = 512
+        self.width = self.camera_size
+        self.height = self.camera_size
         filenumber = [0]
         first = None
 
         #g_exist?  
         time_g = np.zeros(10)
-        image_g = np.zeros((1, 512, 512))  
+ 
         if  g_exists == 1:
             
             file = h5py.File(path_g+r'\header.mat','r')
@@ -221,8 +221,7 @@ class Image_Loader():
         
         #r_exist?
         time_r = np.zeros(10)
-        image_r = np.zeros((1, 512, 512))
-
+        
         if  r_exists == 1:
             file = h5py.File(path_r+r'\header.mat','r')
             rfilename = str(filenumber[0]) + '.glimpse'
@@ -258,7 +257,6 @@ class Image_Loader():
             
         #b_exist?    
         time_b = np.zeros(10)
-        image_b = np.zeros((1, 512, 512))
 
         if  b_exists == 1:
             print(f'Calculating b Backgrounds with mode {bac_mode}')  
@@ -358,14 +356,21 @@ class Image_Loader():
 
         print(dframe)
 
-        left_image  = dframe[0:self.height,0:170]
-        right_image = dframe[0:self.height,171:341]
-        blue_image = dframe[0:self.height,342:512]
+        split_1 = int(self.camera_size / 3)          # e.g., 170 for 512, or 341 for 1024
+        split_2 = int((self.camera_size / 3) * 2)    # e.g., 341 for 512, or 682 for 1024
+        # May be need change
+
+        left_image  = dframe[0:self.height, 0:split_1]
+        right_image = dframe[0:self.height, (split_1 + 1):split_2]
+        blue_image  = dframe[0:self.height, (split_2 + 1):self.camera_size]
+        
+
         rows, cols = right_image.shape
         
         left_image_trans = cv2.warpAffine(left_image, self.M, (cols, rows), flags = cv2.WARP_INVERSE_MAP)
         blue_image_trans = cv2.warpAffine(blue_image, self.Mb, (cols, rows), flags = cv2.WARP_INVERSE_MAP)
             
+        
         dcombined_image = (right_image + left_image_trans + blue_image_trans)
         self.dcombined_image = dcombined_image
 
@@ -426,8 +431,8 @@ class Image_Loader():
                 pass
             
             b = Blob(raw_blob, self.M, self.Mb)
-            b.map_coord()
-            b.check_bound()
+            b.map_coord(image_shape = self.image_g.shape)
+            b.check_bound(image_shape = self.image_g.shape)
 
             b.set_image(self.dframe_r, laser = 'red')
             b.set_image(self.dframe_g, laser = 'green')
@@ -597,7 +602,6 @@ class Image_Loader():
                       'green' : cont_coord_list_g,
                       'blue' : cont_coord_list_b
                       }
-        breakpoint()
         return coord_list
 
 
