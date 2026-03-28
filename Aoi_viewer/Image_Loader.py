@@ -74,7 +74,8 @@ class Image_Loader():
                 bac[bt] = aves
 
         return np.average(bac, axis=0)
-    
+
+# 這裡在算背景
     def cal_bac_med(self, image, size = 31, fsc = None, fsc_anchor = None, fsc_total = None):
         max = np.quantile(image, 0.9)
         min = np.min(image)
@@ -372,6 +373,7 @@ class Image_Loader():
             
         
         dcombined_image = (right_image + left_image_trans + blue_image_trans)
+        #看要不要加東西(去背景之類的)
         self.dcombined_image = dcombined_image
 
     

@@ -109,7 +109,7 @@ class Glimpse_mapping:
         ave_arr = ave_arr/(nframes)
         frame = ave_arr
 
-        # 2. Calculate the 5th percentile for a 5x5 neighborhood around every pixel
+        # 2. Calculate the 5th percentile for a 7x7 neighborhood around every pixel
         bac = scipy.ndimage.percentile_filter(frame, percentile=5, size=7)
 
         # 3. Subtract this local background from the original image

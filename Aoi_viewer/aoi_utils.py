@@ -131,6 +131,7 @@ def load_path(thres, path, fsc, camera_size=1024):
     fsc.set("load_progress", '1')
     return loader, image_g, image_r, image_b, image_datas
 
+# 偵測blob intensity 到hel0檔
 def cal_blob_intensity(loader, coord_list, path, image_datas, maxf, minf, fsc):
     coord_lists = [coord_list]
     trace_gg, trace_gr, trace_rr, trace_bb, trace_bg, trace_br, i = loader.cal_intensity(coord_lists[0], maxf, minf, fsc)
@@ -188,20 +189,6 @@ def load_config(num, subfolder):
         print(f"❌ Corrupted JSON: {e}")
         return None
     
-
-def load_config(num, subfolder):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(base_dir, "configs", str(subfolder), f"{num}.json")
-    
-    if not os.path.exists(file_path):
-        return None
-        
-    try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return None
-
 
 def save_config(num, config_data, subfolder="1024"):
     folder_path = os.path.join("configs", str(subfolder))
