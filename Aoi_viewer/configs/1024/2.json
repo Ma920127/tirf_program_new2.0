@@ -1,1 +1,39 @@
-{"thres": 7, "mpath": "C:\\Users\\genem\\Desktop\\Mapping\\20250809", "average_frame": 10, "ratio_thres": 1.5, "minf": 494, "maxf": 817, "channel": "green", "radius": 3, "leakage_g": 0.08, "leakage_b": 0.3, "f_lag": 2, "lag_b": 3, "snap_time_g": [0, 149], "snap_time_b": [0, 10], "red_intensity": 800, "red_time": [0, 149], "red": true, "green_intensity": 1000, "green_time": [0, 10], "green": false, "fit": true, "fit_b": false, "gfp_plot": true, "preserve_selected": false, "overwrite": 0}
+{
+    "thres": 15,
+    "mpath": "C:\\Users\\genem\\Desktop\\Mapping\\1024\\20260329",
+    "average_frame": 10,
+    "ratio_thres": 1.5,
+    "minf": 494,
+    "maxf": 817,
+    "channel": "green",
+    "radius": 3,
+    "leakage_g": 0.08,
+    "leakage_b": 0.3,
+    "f_lag": 2,
+    "lag_b": 3,
+    "snap_time_g": [
+        0,
+        149
+    ],
+    "snap_time_b": [
+        0,
+        10
+    ],
+    "red_intensity": 800,
+    "red_time": [
+        0,
+        149
+    ],
+    "red": true,
+    "green_intensity": 1000,
+    "green_time": [
+        0,
+        10
+    ],
+    "green": false,
+    "fit": true,
+    "fit_b": false,
+    "gfp_plot": true,
+    "preserve_selected": false,
+    "overwrite": 0
+}
