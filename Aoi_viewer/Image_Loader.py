@@ -618,7 +618,7 @@ class Image_Loader():
         trace_bb = np.zeros((total_blobs, int(self.b_length)))
         trace_bg = np.zeros((total_blobs, int(self.b_length)))
         trace_br = np.zeros((total_blobs, int(self.b_length)))
-
+        # 用9*9 pixel算intensity
         b_snap = np.zeros((total_blobs, 3, self.b_length, 9, 9))
         g_snap = np.zeros((total_blobs, 2, self.g_length, 9, 9))
         r_snap = np.zeros((total_blobs, 1, self.r_length, 9, 9))
