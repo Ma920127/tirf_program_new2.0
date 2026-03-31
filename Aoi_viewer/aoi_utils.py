@@ -44,15 +44,20 @@ def cal(path):
 
 def draw_blobs(fig, coord_list, r, reverse):
     color = '#1f77b4' if int(reverse) == 0 else 'yellow'
+
+    # New add selectedpoints=None,
     try:
         fig.update_traces(x=coord_list[:, 1], y=coord_list[:, 0],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_r'))
         fig.update_traces(x=coord_list[:, 3], y=coord_list[:, 2],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_g'))
         fig.update_traces(x=coord_list[:, 5], y=coord_list[:, 4],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_b'))
     except:
         fig.update_traces(x=[], y=[], marker=dict(size=2 * r + 1, line=dict(width=2)), customdata= [], selector=dict(name='blobs_r'))
@@ -131,6 +136,7 @@ def load_path(thres, path, fsc, camera_size=1024):
     fsc.set("load_progress", '1')
     return loader, image_g, image_r, image_b, image_datas
 
+# 偵測blob intensity 到hel0檔
 def cal_blob_intensity(loader, coord_list, path, image_datas, maxf, minf, fsc):
     coord_lists = [coord_list]
     trace_gg, trace_gr, trace_rr, trace_bb, trace_bg, trace_br, i = loader.cal_intensity(coord_lists[0], maxf, minf, fsc)
@@ -188,20 +194,6 @@ def load_config(num, subfolder):
         print(f"❌ Corrupted JSON: {e}")
         return None
     
-
-def load_config(num, subfolder):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(base_dir, "configs", str(subfolder), f"{num}.json")
-    
-    if not os.path.exists(file_path):
-        return None
-        
-    try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return None
-
 
 def save_config(num, config_data, subfolder="1024"):
     folder_path = os.path.join("configs", str(subfolder))
