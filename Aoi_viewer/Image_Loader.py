@@ -21,6 +21,9 @@ class Image_Loader():
     def __init__(self, n_pro, thres, path, g_length, r_length, b_length, g_start, r_start, b_start, bac_mode, camera_size=1024):
         self.camera_size = camera_size # Save it to the class
         self.thres = thres
+        self.image_g = None
+        self.image_r = None
+        self.image_b = None
         self.path = path
         self.path_g = path+r'\g'
         self.path_b = path+r'\b'     
@@ -36,9 +39,6 @@ class Image_Loader():
         self.tic = None
         self.dcombined_image = None
         self.dframe = None
-        self.image_g = None
-        self.image_r = None
-        self.image_b = None
         self.M = None
         self.Mb = None
         self.b_exists = None
@@ -146,7 +146,9 @@ class Image_Loader():
     def load_image(self, fsc = None):
         
         self.tic = time.perf_counter()
-        
+        image_g = self.image_g
+        image_r = self.image_r
+        image_b = self.image_b
         path = self.path
         path_g = self.path_g
         path_r = self.path_r
