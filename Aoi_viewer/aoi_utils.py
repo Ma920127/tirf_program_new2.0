@@ -44,15 +44,20 @@ def cal(path):
 
 def draw_blobs(fig, coord_list, r, reverse):
     color = '#1f77b4' if int(reverse) == 0 else 'yellow'
+
+    # New add selectedpoints=None,
     try:
         fig.update_traces(x=coord_list[:, 1], y=coord_list[:, 0],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_r'))
         fig.update_traces(x=coord_list[:, 3], y=coord_list[:, 2],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_g'))
         fig.update_traces(x=coord_list[:, 5], y=coord_list[:, 4],
                           marker=dict(size=2 * r + 1, line=dict(width=2), color=color),
+                          selectedpoints=None,
                           selector=dict(name='blobs_b'))
     except:
         fig.update_traces(x=[], y=[], marker=dict(size=2 * r + 1, line=dict(width=2)), customdata= [], selector=dict(name='blobs_r'))

@@ -26,5 +26,8 @@ class GlobalState:
         self.org_size = 1
         self.blob_disable = True
         self.fret_g = []
+        # 🌟 NEW: Add x_range and y_range to store the zoom state!
+        self.x_range = None
+        self.y_range = None
 
 global_state = GlobalState()

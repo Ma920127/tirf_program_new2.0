@@ -5,7 +5,7 @@ import time
 import logging
 import os
 from tqdm import tqdm
-from dash import callback_context, no_update
+from dash import callback_context, no_update, Patch
 from dash_extensions.enrich import Output, Input, State
 from aoi_utils import draw_blobs, move_blobs, update_blobs_coords, load_path, cal_blob_intensity, save_aoi_utils, load_aoi_utils, update_fret_labels
 from cal_drift import cal_drift
@@ -76,7 +76,6 @@ def register_update_fig(app, fsc):
                    average_frame, loadp, minf, maxf, reverse, channel, cal_drift_bt, load_drift, cal_intensity,
                    openp, configs, aoi_mode, graph_size_tab, ratio_thres, radius, selector,
                    move_step, path, mpath, plot, thres, per_n, pairing_threshold, auto):
-        # print("🖼️ UPDATE FIG FIRED! 🖼️")
         gs = global_state
         current_fig = gs.fig
         step_start = time.perf_counter()
@@ -87,12 +86,17 @@ def register_update_fig(app, fsc):
         # 1. Figure out what triggered the callback
         ctx = callback_context
         if not ctx.triggered:
-            changed_id = 'No clicks yet'
+            triggered_ids = ['No clicks yet']
         else:
-            changed_id = ctx.triggered[0]['prop_id']
+            triggered_ids = [t['prop_id'] for t in ctx.triggered]
+
+        # Keep a primary changed_id for legacy checks, but prioritize real events
+        changed_id = triggered_ids[0]
+
 
         # 2. Check if the TAB was the thing that got clicked
-        if 'graph-size-tabs' in changed_id:
+        # if 'graph-size-tabs' in changed_id:
+        if 'graph-size-tabs.value' in triggered_ids and len(triggered_ids) == 1:
             
             # Instantly reset ALL global arrays and lists to the new size
             gs.set_camera_size(camera_size)
@@ -112,6 +116,12 @@ def register_update_fig(app, fsc):
 
         if "loadp" in changed_id:
             fsc.set("load_progress", "0")
+            
+            # New add
+            # 🌟 ADD THESE TWO LINES: Clear zoom memory on new load
+            gs.x_range = None
+            gs.y_range = None
+
             gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc, camera_size = camera_size)
             current_fig = create_initial_figure(gs.image_g, minf, maxf, radius)
             gs.blob_disable = False
@@ -219,19 +229,67 @@ def register_update_fig(app, fsc):
             logging.info("Intensity calculation in %.3f sec", time.perf_counter()-step_start)
             step_start = time.perf_counter()
 
-        if "graph" in changed_id:
+
+        # 🌟 1. CHANGE THIS TO EXACTLY MATCH RELAYOUT (ZOOM/PAN)
+        # if changed_id == "graph.relayoutData":
+        if 'graph.relayoutData' in triggered_ids and len(triggered_ids) == 1:
+            if isinstance(relayout, dict):
+                # Save the exact zoom coordinates!
+                if "xaxis.range[0]" in relayout and "yaxis.range[0]" in relayout:
+                    gs.x_range = [relayout["xaxis.range[0]"], relayout["xaxis.range[1]"]]
+                    gs.y_range = [relayout["yaxis.range[0]"], relayout["yaxis.range[1]"]]
+                # If the user double-clicks to reset the view, clear the memory
+                elif "xaxis.autorange" in relayout:
+                    gs.x_range = None
+                    gs.y_range = None
+                    # New added
+                    # 👉 FIX 1: Reset the sizing memory when zooming all the way out!
+                    gs.org_size = 1.0
+                    gs.dr = float(radius)
+
             if isinstance(relayout, dict) and "xaxis.range[1]" in relayout:
                 try:
-                    size = np.round(512 / (relayout["xaxis.range[1]"] - relayout["xaxis.range[0]"]), 2)
-                    if size != gs.org_size:
-                        gs.org_size = size
-                        gs.dr = radius * size
+                    # Fix the math: Use the dynamic 'camera_size' instead of hardcoded 512
+                    zoom_range = relayout["xaxis.range[1]"] - relayout["xaxis.range[0]"]
+                    zoom_ratio = camera_size / zoom_range 
+                    new_size = np.round(zoom_ratio, 2)
+                    
+                    if new_size != gs.org_size:
+                        gs.org_size = new_size
+                        gs.dr = radius * new_size
+                        
+                        # Fix the lag: Use Dash Patch to update ONLY the marker sizes!
                         if np.any(np.array(gs.coord_list)):
-                            current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)
+                            patched_fig = Patch()
+                            new_marker_size = 2 * gs.dr + 1
+                            color = '#1f77b4' if int(reverse) == 0 else 'yellow'
+
+                            for trace_idx in [1, 2, 3]:
+                                patched_fig["data"][trace_idx]["marker"]["size"] = new_marker_size
+                                patched_fig["data"][trace_idx]["marker"]["color"] = color
+
+                                # New added
+                                # 👉 FIX 2: Save the new size to the background figure!
+                                # Without this, moving a slider sends the old unzoomed sizes back to the browser.
+                                if len(gs.fig.data) > trace_idx:
+                                    gs.fig.data[trace_idx].marker.size = new_marker_size
+                                    gs.fig.data[trace_idx].marker.color = color
+
+                            return (patched_fig, no_update, no_update, no_update, no_update,
+                                    no_update, no_update, no_update, no_update, no_update, 
+                                    no_update, no_update, no_update, no_update, no_update, no_update)
+                    else:
+                        # If the user just panned, new_size == gs.org_size.
+                        return (no_update, no_update, no_update, no_update, no_update,
+                                no_update, no_update, no_update, no_update, no_update, 
+                                no_update, no_update, no_update, no_update, no_update, no_update)
+
                 except Exception as e:
                     logging.exception("Error during relayout: %s", e)
 
-            if isinstance(clickData, dict): #maybe can add new tool(add new blob)
+        # 🌟 2. CHANGE THIS TO EXACTLY MATCH CLICKS (DELETING BLOBS)
+        if changed_id == "graph.clickData":
+            if isinstance(clickData, dict):
                 if clickData["points"][0]["curveNumber"] in [1,2,3]:
                     if aoi_mode == 0:
                         remove_id = clickData["points"][0]["pointNumber"]
@@ -240,6 +298,7 @@ def register_update_fig(app, fsc):
                         gs.coord_list = np.delete(np.array(gs.coord_list), remove_id, axis=0).tolist()
                         gs.blob_list.pop(remove_id)
                         current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)
+
 
         # (Undo, Save, Load, Clear AOI logic)
         if aoi_mode == 2:
@@ -280,24 +339,35 @@ def register_update_fig(app, fsc):
             if int(anchor) < channel_dict[channel].shape[0]:
                 frame = int(anchor)
 
-        
-        
+
         if 'reverse.value' in changed_id:
+            # 1. Safely handle the radius (fallback to default radius if not zoomed)
+            radius_to_use = gs.dr if getattr(gs, 'dr', None) is not None else float(radius)
+            
+            # 2. Safely convert coordinates to a numpy array
+            coords_to_use = np.array(gs.coord_list) if gs.coord_list else np.empty((0,))
+
+            # 3. Update the background colorscale
+            # 3. Update the background colorscale directly
             if int(reverse) == 0:
-                current_fig.update_traces(colorscale='gray', selector=dict(type='heatmap'))
-                current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
+                current_fig.data[0].colorscale = 'gray'
             else:
-                current_fig.update_traces(colorscale='gray_r', selector=dict(type='heatmap'))
-                current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
-        
+                current_fig.data[0].colorscale = 'gray_r'
+                
+            # 4. Redraw using the safe variables!
+            current_fig = draw_blobs(current_fig, coords_to_use, radius_to_use, reverse)
+
+
+
         end_idx = min(channel_dict[channel].shape[0], int(frame) + int(average_frame))
         start_idx = max(0, end_idx - int(average_frame))
 
         smooth_image = np.average(channel_dict[channel][start_idx:end_idx], axis=0)
         current_fig.data[0].z = smooth_image
 
+        current_fig.data[0].zmax = maxf
+        current_fig.data[0].zmin = minf
 
-        current_fig.update_traces(zmax=maxf, zmin=minf, selector=dict(type="heatmap"))
         if channel == 'green':
             current_fig = update_fret_labels(current_fig, frame)
         else:
@@ -313,16 +383,69 @@ def register_update_fig(app, fsc):
         g_max = max(channel_dict["green"].shape[0]-1, 0)
         current_max_frame = channel_dict[channel].shape[0]
         anchor = min(int(frame), current_max_frame - 1) if current_max_frame > 0 else 0
-        # anchor = min(int(frame), channel_dict[channel].shape[0])
-        # AI
         
         aoi_num = len(gs.coord_list)
         auto_state = no_update if fsc.get("mode") != "auto" else (auto or 0) + 1
 
+        # New add
+        # 🌟 ADD THIS BLOCK: Force Plotly to respect our saved zoom!
+        if getattr(gs, 'x_range', None) is not None and getattr(gs, 'y_range', None) is not None:
+            current_fig.update_xaxes(range=gs.x_range, autorange=False)
+            current_fig.update_yaxes(range=gs.y_range, autorange=False)
+
+        # 👇 THE FIX: Add datarevision=time.time() to force Plotly to redraw!
+        current_fig.update_layout(uirevision='constant', datarevision=time.time())
         gs.fig = current_fig
 
-        return (current_fig, None, anchor, gs.blob_disable, gs.blob_disable,
+        # 🌟 FIX: Create a fresh Plotly Figure object to break the memory reference cache!
+        import copy
+        fresh_fig = copy.deepcopy(current_fig)
+
+
+        return (fresh_fig, None, anchor, gs.blob_disable, gs.blob_disable,
                 anchor, slider_max, snap_g_max, r_max, snap_b_max, g_max, aoi_mode,
                 aoi_num, None, True, auto_state)
 
     return register_update_fig
+
+
+# old version
+
+# 1. Figure out what triggered the callback
+# ctx = callback_context
+# if not ctx.triggered:
+#     changed_id = 'No clicks yet'
+# else:
+#     changed_id = ctx.triggered[0]['prop_id']
+
+
+# if 'reverse.value' in changed_id:
+#     if int(reverse) == 0:
+#         current_fig.update_traces(colorscale='gray', selector=dict(type='heatmap'))
+#         current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
+#     else:
+#         current_fig.update_traces(colorscale='gray_r', selector=dict(type='heatmap'))
+#         current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
+
+# old version
+# if "graph" in changed_id:
+#     if isinstance(relayout, dict) and "xaxis.range[1]" in relayout:
+#         try:
+#             size = np.round(512 / (relayout["xaxis.range[1]"] - relayout["xaxis.range[0]"]), 2)
+#             if size != gs.org_size:
+#                 gs.org_size = size
+#                 gs.dr = radius * size
+#                 if np.any(np.array(gs.coord_list)):
+#                     current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)
+#         except Exception as e:
+#             logging.exception("Error during relayout: %s", e)
+
+#     if isinstance(clickData, dict): #maybe can add new tool(add new blob)
+#         if clickData["points"][0]["curveNumber"] in [1,2,3]:
+#             if aoi_mode == 0:
+#                 remove_id = clickData["points"][0]["pointNumber"]
+#                 gs.rem_list.append(gs.coord_list[remove_id])
+#                 gs.rem_list_blob.append(gs.blob_list[remove_id])
+#                 gs.coord_list = np.delete(np.array(gs.coord_list), remove_id, axis=0).tolist()
+#                 gs.blob_list.pop(remove_id)
+#                 current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)
