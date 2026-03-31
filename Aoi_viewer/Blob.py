@@ -71,7 +71,6 @@ class Blob():
             self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
             self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 684)
             self.coords[1] = [round(self.org_y), round(self.org_x) + 342]
-            # Need change
             
         # old version
         # channel_w = total_width // 3
