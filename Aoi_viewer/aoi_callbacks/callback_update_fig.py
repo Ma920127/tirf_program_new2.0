@@ -95,8 +95,7 @@ def register_update_fig(app, fsc):
 
 
         # 2. Check if the TAB was the thing that got clicked
-        # if 'graph-size-tabs' in changed_id:
-        if 'graph-size-tabs.value' in triggered_ids and len(triggered_ids) == 1:
+        if changed_id == 'graph-size-tabs.value':
             
             # Instantly reset ALL global arrays and lists to the new size
             gs.set_camera_size(camera_size)
@@ -106,12 +105,18 @@ def register_update_fig(app, fsc):
             
             # Rebuild the figure with the new axes
             new_fig = create_initial_figure(dummy_image, minf, maxf, radius)
+            
+            # 👇 THE FIX: Force Plotly to redraw and break the memory cache!
+            new_fig.update_layout(uirevision='constant', datarevision=time.time())
             gs.fig = new_fig
             
-            # Return exactly 16 items! No graph_style here.
-            return (new_fig, no_update, no_update, no_update, no_update, 
-                    no_update, no_update, no_update, no_update, no_update, 
-                    no_update, no_update, no_update, no_update, no_update, no_update)
+            import copy
+            fresh_fig = copy.deepcopy(new_fig)
+            
+            # Return the fresh figure, and reset all sliders/buttons to 0 since the image is cleared
+            return (fresh_fig, None, 0, True, True, 
+                    0, 0, 0, 0, 0, 0, no_update, 
+                    0, None, True, no_update)
         
 
         if "loadp" in changed_id:
