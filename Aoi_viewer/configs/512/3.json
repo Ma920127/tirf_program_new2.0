@@ -1,8 +1,8 @@
 {
-    "thres": 5,
-    "mpath": "D:\\TIRF_Program\\Bkp_picker\\mapping\\20231120",
+    "thres": 7,
+    "mpath": "D:\\AOI_TraceViewer\\tirf_program_new2.0\\mapping\\512_512\\20260325",
     "average_frame": 10,
-    "ratio_thres": 1.3,
+    "ratio_thres": 1.5,
     "minf": 494,
     "maxf": 4000,
     "channel": "green",
@@ -33,5 +33,7 @@
     "green": false,
     "fit": true,
     "fit_b": true,
-    "gfp_plot": false
+    "gfp_plot": false,
+    "preserve_selected": null,
+    "overwrite": null
 }
