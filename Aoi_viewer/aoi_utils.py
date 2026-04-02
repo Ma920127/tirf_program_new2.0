@@ -140,6 +140,7 @@ def load_path(thres, path, fsc, camera_size=1024):
     loader = Image_Loader(0, thres, path, *time_params, 1, camera_size=camera_size)
     image_datas = loader.load_image(fsc)
     image_width = loader.width
+    
     if image_width != camera_size:
         raise ValueError(f"SIZE MISMATCH: Expected {camera_size}, got {image_width}")
         

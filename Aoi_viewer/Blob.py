@@ -109,21 +109,21 @@ class Blob():
                 self.quality = 0
 
         elif w == 1024:
-            if (self.org_x - r) < 1 or (self.org_x + r) > 340 or (self.org_y - r) < 1 or (self.org_y + r) > 1023:
+            if (self.org_x - r) < 1 or (self.org_x + r) > 340 or (self.org_y - r) < 90 or (self.org_y + r) > 980:
                 self.quality = 0
 
             # check red
-            if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > 340 or (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > 1022:
+            if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > 340 or (self.coords[0][0] - r) < 92 or (self.coords[0][0] + r) > 978:
                 self.quality = 0
             
             # check green
-            if (self.coords[1][1] - r) < 342 or (self.coords[1][1] + r) > 682 or (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > 1022:
+            if (self.coords[1][1] - r) < 342 or (self.coords[1][1] + r) > 682 or (self.coords[1][0] - r) < 92 or (self.coords[1][0] + r) > 978:
                 self.quality = 0
 
             #check blue
-            if (self.coords[2][1] - r - 1) < 684 or (self.coords[2][1] + r + 1) > 1023 or (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > 1022:
+            if (self.coords[2][1] - r - 1) < 684 or (self.coords[2][1] + r + 1) > 1023 or (self.coords[2][0] - r) < 92 or (self.coords[2][0] + r) > 978:
                 self.quality = 0
-            #Maybe need change 
+        
 
         # old version
         # channel_w = w // 3
