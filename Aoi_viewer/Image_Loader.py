@@ -361,7 +361,6 @@ class Image_Loader():
 
         split_1 = int(self.camera_size / 3)          # e.g., 170 for 512, or 341 for 1024
         split_2 = int((self.camera_size / 3) * 2)    # e.g., 341 for 512, or 682 for 1024
-        # May be need change
 
         left_image  = dframe[0:self.height, 0:split_1]
         right_image = dframe[0:self.height, (split_1 + 1):split_2]
@@ -375,7 +374,6 @@ class Image_Loader():
             
         
         dcombined_image = (right_image + left_image_trans + blue_image_trans)
-        #看要不要加東西(去背景之類的)
         self.dcombined_image = dcombined_image
 
     
@@ -445,6 +443,9 @@ class Image_Loader():
             b.check_max(self.dcombined_image, ratio_thres)
             np.save(self.path + r'\\dcombined_image.npy', self.dcombined_image)
 
+            # 🌟 SPEED FIX 1: If check_max rejected it, skip ALL fitting!
+            if b.quality == 0:
+                continue
 
             if self.r_exists or self.g_exists or self.b_exists:
                 b.gaussian_fit(ch = 'red')
@@ -453,11 +454,19 @@ class Image_Loader():
             elif self.b_exists:
                 b.gaussian_fit(ch = 'red', laser = 'blue')
             
+            # 🌟 SPEED FIX 2: If the Red fit failed, skip the Green and Blue fits!
+            if b.quality == 0:
+                continue
+            
             if self.g_exists:
                 b.gaussian_fit(ch = 'green')
             elif self.b_exists:
                 b.gaussian_fit(ch = 'green', laser = 'blue')
-    
+
+            # 🌟 SPEED FIX 3: If the Green fit failed, skip the Blue fit!
+            if b.quality == 0:
+                continue
+
             if self.b_exists:
                 b.gaussian_fit(ch = 'blue')
 
