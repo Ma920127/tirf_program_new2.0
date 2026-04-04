@@ -11,7 +11,6 @@ from tqdm import tqdm
 import scipy.ndimage
 import cv2
 from Blob import Blob
-import os
 
 
 
@@ -200,6 +199,14 @@ class Image_Loader():
             nframes_true = int(file[r'/vid/nframes'][0][0])
             self.width=int(file[r'/vid/width/'][0][0])
             self.height=int(file[r'/vid/height/'][0][0])
+
+            # If the actual data size does not match the size the user selected in the Tab:
+            if self.width != self.camera_size or self.height != self.camera_size:
+                raise ValueError(
+                    f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                    f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                )
+            
             filenumber=file[r'/vid/filenumber/'][:].flatten().astype('int')
             gfilename = str(filenumber[0]) + '.glimpse'
             gfile_path = path_g+r'\\'+gfilename
@@ -238,6 +245,14 @@ class Image_Loader():
             if first == None:
                 self.width=int(file[r'/vid/width/'][0][0])
                 self.height=int(file[r'/vid/height/'][0][0])
+
+                # If the actual data size does not match the size the user selected in the Tab:
+                if self.width != self.camera_size or self.height != self.camera_size:
+                    raise ValueError(
+                        f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                        f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                    )
+                
                 time_r, first = self.cal_time_g(path_r, self.r_start, self.r_length)
             else:
                 time_r = self.cal_time(path_r, self.r_start, self.r_length, first)
@@ -280,6 +295,14 @@ class Image_Loader():
             if first == None:   
                 self.width=int(file[r'/vid/width/'][0][0])
                 self.height=int(file[r'/vid/height/'][0][0])
+                
+                # If the actual data size does not match the size the user selected in the Tab:
+                if self.width != self.camera_size or self.height != self.camera_size:
+                    raise ValueError(
+                        f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                        f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                    )
+                
                 time_b, first = self.cal_time_g(path_b, self.b_start, self.b_length)
             else:
                 time_b = self.cal_time(path_b, self.b_start, self.b_length, first)
@@ -305,12 +328,7 @@ class Image_Loader():
             image_b += 2**15  
             fsc_anchor = (g_finished + r_finished + b_finished) / (g_exists + r_exists + b_exists)  
             self.bac_b = self.cal_bac_med(image_b, 27, fsc, fsc_anchor, fsc_total) 
-        ###
-
-
-
-        #rescale image intensity and remove background
-
+        
         self.image_g = image_g
         self.image_r = image_r
         self.image_b = image_b
@@ -485,8 +503,6 @@ class Image_Loader():
             if self.b_exists:
                 b.gaussian_fit(ch = 'blue')
 
-            #b.check_fit(ratio_thres)
-
             if b.quality == 1:
                 #coord_list.append(b.get_coord())
                 blob_list.append(b)
@@ -498,8 +514,6 @@ class Image_Loader():
     
     
     def cal_drift(self, blob_list, laser, use_ch, n_slices = None, interval = None, anchors = None):
-        
-        
         tot_coord_list_drift = []
 
         length_dict = {
@@ -634,7 +648,6 @@ class Image_Loader():
 
 
     def cal_intensity(self, coord_list, maxf = 35000, minf = 32946, fsc = None):
-        
         print('Calcultating Intensities')
 
         total_blobs = len(coord_list)
@@ -651,15 +664,25 @@ class Image_Loader():
 
         if self.g_exists == 1:
             bac_g = self.bac_g
-            image_g = (self.image_g - bac_g).astype(np.float32)
+            # image_g = (self.image_g - bac_g).astype(np.float32)
+
+            image_g = self.image_g.copy() 
+            image_g -= bac_g
+            image_g = image_g.astype(np.float32)
         
         if self.r_exists == 1:
             bac_r = self.bac_r
-            image_r = (self.image_r - bac_r).astype(np.float32)
+            # image_r = (self.image_r - bac_r).astype(np.float32)
+            image_r = self.image_r.copy() 
+            image_r -= bac_r
+            image_r = image_r.astype(np.float32)
         
         if self.b_exists == 1:
             bac_b = self.bac_b
-            image_b = (self.image_b - bac_b).astype(np.float32)
+            # image_b = (self.image_b - bac_b).astype(np.float32)
+            image_b = self.image_b.copy() 
+            image_b -= bac_b
+            image_b = image_b.astype(np.float32)
 
 
         self.cpath=os.path.join(self.path,r'circled')
@@ -716,8 +739,16 @@ class Image_Loader():
                 b_snap[blob_count][1] = self.image_b[:, yg-4:yg+4+1,xg-4:xg+4+1]
                 b_snap[blob_count][2] = self.image_b[:, yr-4:yr+4+1,xr-4:xr+4+1]
              
-        
-        np.savez(self.path + r'\blobs.npz', b = b_snap, g = g_snap, r = r_snap, minf = minf, maxf = maxf, yr = yr, xr = xr, yg = yg, xg = xg, yb = yb, xb = xb)
+        all_coords = np.array(coord_list)
+        np.savez(
+            os.path.join(self.path, 'blobs.npz'), 
+            b=b_snap, 
+            g=g_snap, 
+            r=r_snap, 
+            minf=minf, 
+            maxf=maxf, 
+            coords=all_coords  # 👈 This saves ALL coordinates for ALL blobs!
+        )
         
         return trace_gg, trace_gr, trace_rr, trace_bb, trace_bg, trace_br, blob_count+1
     

@@ -1,28 +1,47 @@
 import plotly.graph_objects as go
+import cv2
+import numpy as np
 
 
 def create_initial_figure(image_g, minf, maxf, radius):
     """
     Create and return the initial figure with the image and empty blob markers.
     """
+    # --- 1. THE COMPRESSION TRICK ---
+    original_size = image_g.shape[1] # Usually 1024
+    target_size = 512                # The new, smaller size for faster drawing
+    
+    # Compress the massive image down to 512x512
+    compressed_image = cv2.resize(
+        image_g[0].astype(np.float32), 
+        (target_size, target_size), 
+        interpolation=cv2.INTER_AREA
+    )
+    
+    # Create artificial X and Y coordinates that stretch from 0 up to 1024
+    x_coords = np.linspace(0, original_size, target_size)
+    y_coords = np.linspace(0, original_size, target_size)
+    # ---------------------------------
     fig = go.Figure(
         data=go.Heatmap(
-            z=image_g[0],
+            z=compressed_image,  # Use the small image
+            x=x_coords,          # Stretch it across the X axis (0 to 1024)
+            y=y_coords,          # Stretch it across the Y axis (0 to 1024)
             colorscale='gray',
             zmin=minf,
             zmax=maxf
+        )
     )
-)
     fig.update_layout(
         margin=dict(r=120),
         xaxis=dict(
             showline=True,
-            range=(0, image_g.shape[2]),
+            range=(0, original_size), # Keep axes at original size
             autorange=False
         ),
         yaxis=dict(
             showline=True,
-            range=(image_g.shape[1], 0),
+            range=(original_size, 0), # Keep axes at original size
             autorange=False,
             scaleanchor="x",
             scaleratio=1
@@ -31,6 +50,8 @@ def create_initial_figure(image_g, minf, maxf, radius):
         uirevision=True,
         dragmode='pan'
     )
+
+
     # Empty traces for each color channel
     fig.add_scatter(
         x=[], y=[],
