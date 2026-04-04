@@ -139,11 +139,7 @@ def load_path(thres, path, fsc, camera_size=1024):
     time_params = cal(path)
     loader = Image_Loader(0, thres, path, *time_params, 1, camera_size=camera_size)
     image_datas = loader.load_image(fsc)
-    image_width = loader.width
-    
-    if image_width != camera_size:
-        raise ValueError(f"SIZE MISMATCH: Expected {camera_size}, got {image_width}")
-        
+
     image_g = loader.image_g
     image_r = loader.image_r
     image_b = loader.image_b
@@ -247,35 +243,3 @@ def load_aoi_utils(file):
         blob_list.append(b)
     return blob_list
 
-
-
-
-# old version
-# def to_dict(b):
-#     b.dframe_r = None
-#     b.dframe_b = None
-#     b.dframe_g = None
-#     b.dcombined_image = None    
-#     b.params = None        
-#     b = b.__dict__
-#     for k in b.keys():
-#         if isinstance(b[k], np.ndarray):
-#             b[k] = b[k].tolist()
-#     return b
-
-# def save_config(num, config_data):
-#     os.makedirs(r'configs', exist_ok=True)
-#     with open(f'configs\\{num}.json', 'w') as fp:
-#         json.dump(config_data, fp)
-
-# def load_config(num, init=False):
-#     try:
-#         import os
-#         print("Current working directory:", os.getcwd())
-#         with open(f'configs\\{num}.json', 'r') as fp:
-#             config_data = json.load(fp)
-#         #return list(config_data.values())
-#         return dict(config_data)
-#     except:
-#         print('fail')
-#         raise PreventUpdate
