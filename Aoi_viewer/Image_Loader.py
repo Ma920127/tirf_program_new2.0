@@ -79,7 +79,10 @@ class Image_Loader():
     def cal_bac_med(self, image, size = 31, fsc = None, fsc_anchor = None, fsc_total = None):
         max = np.quantile(image, 0.9)
         min = np.min(image)
-        image = (image - min) / (max - min) * 255
+        image = image.astype(np.float32, copy=True)
+        image -= min
+        image /= (max - min)
+        image *= 255
         image_8 = np.clip(image, 0, 255).astype(np.uint8)
         aves = np.zeros_like(image)
         for bt in tqdm(range(image.shape[0])):
@@ -201,8 +204,8 @@ class Image_Loader():
             gfilename = str(filenumber[0]) + '.glimpse'
             gfile_path = path_g+r'\\'+gfilename
             time_g, first = self.cal_time_g(path_g, self.g_start, self.g_length)
-            image_g = np.fromfile(gfile_path, dtype=(np.dtype('>i2') , (self.height, self.width)))
-
+            image_g_first = np.fromfile(gfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_g_first]
 
             for n in tqdm(range(1, 10)):
                 try:
@@ -210,12 +213,14 @@ class Image_Loader():
                     gfile_path = path_g+r'\\'+gfilename
                     size = os.path.getsize(gfile_path)
                     if size>0:
-                        image_g_1 = np.fromfile(gfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_g = np.concatenate((image_g, image_g_1))
+                        image_g_next = np.fromfile(gfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_g_next) # Append to list instead of concatenating
+
                 except:
                     pass
-    
-            image_g = image_g + 2**15
+            image_g = np.concatenate(image_list)
+            image_g = image_g.astype(np.float32)
+            image_g += 2**15
             print(f'Calculating g Backgrounds with mode {bac_mode}') 
             fsc_anchor = 0
             self.bac_g = self.cal_bac_med(image_g, 27, fsc, fsc_anchor, fsc_total) 
@@ -236,22 +241,27 @@ class Image_Loader():
                 time_r, first = self.cal_time_g(path_r, self.r_start, self.r_length)
             else:
                 time_r = self.cal_time(path_r, self.r_start, self.r_length, first)
-            image_r = np.fromfile(rfile_path, dtype=(np.dtype('>i2') , (self.height,self.width))) 
+
+            image_r_first = np.fromfile(rfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_r_first]
+
             for n in range (1, 10):
                 try:
                     rfilename = str(n) + '.glimpse'
                     rfile_path = path_r + r'\\'+rfilename
                     size = os.path.getsize(rfile_path)
                     if size>0:
-                        image_r_1 = np.fromfile(rfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_r = np.concatenate((image_r, image_r_1))
+                        image_r_next = np.fromfile(rfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_r_next) # Append to list instead of concatenating
                 except:
                     pass
-            image_r = image_r + 2**15
+            image_r = np.concatenate(image_list)
+            image_r = image_r.astype(np.float32)
+            image_r += 2**15
 
             print(f'Calculating r Backgrounds with mode {bac_mode}')
             fsc_anchor = (g_finished + r_finished) / (g_exists + r_exists)  
-            self.bac_r = self.cal_bac_med(image_r, 27, fsc, fsc_anchor, fsc_total) #smaller
+            self.bac_r = self.cal_bac_med(image_r, 27, fsc, fsc_anchor, fsc_total)
             try:
                 fsc.set("load_progress", '0')
             except:
@@ -273,7 +283,11 @@ class Image_Loader():
                 time_b, first = self.cal_time_g(path_b, self.b_start, self.b_length)
             else:
                 time_b = self.cal_time(path_b, self.b_start, self.b_length, first)
-            image_b = np.fromfile(bfile_path, dtype=(np.dtype('>i2') , (self.height, self.width)))
+
+            image_b_first = np.fromfile(bfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_b_first]
+
+            
             
             for n in range (1, 10):
                 try:
@@ -281,13 +295,14 @@ class Image_Loader():
                     bfile_path = path_b+r'\\'+bfilename
                     size = os.path.getsize(bfile_path)
                     if size>0:
-                        image_b_1 = np.fromfile(bfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_b = np.concatenate((image_b, image_b_1))
+                        image_b_next = np.fromfile(bfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_b_next) # Append to list instead of concatenating
                 except:
                     pass
 
-
-            image_b = image_b + 2**15   
+            image_b = np.concatenate(image_list)
+            image_b = image_b.astype(np.float32)
+            image_b += 2**15  
             fsc_anchor = (g_finished + r_finished + b_finished) / (g_exists + r_exists + b_exists)  
             self.bac_b = self.cal_bac_med(image_b, 27, fsc, fsc_anchor, fsc_total) 
         ###
