@@ -11,8 +11,6 @@ import logging
 # import imageio.v2 as imageio  # use the recommended import to avoid warnings
 from tqdm import tqdm
 
-
-
 def gaussian(x, amp, mu, sigma):
     return amp * np.exp(-(x - mu)**2 / (2 * sigma**2))
 

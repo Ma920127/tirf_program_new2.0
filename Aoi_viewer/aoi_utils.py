@@ -146,7 +146,6 @@ def load_path(thres, path, fsc, camera_size=1024):
     fsc.set("load_progress", '1')
     return loader, image_g, image_r, image_b, image_datas
 
-# 偵測blob intensity 到hel0檔
 def cal_blob_intensity(loader, coord_list, path, image_datas, maxf, minf, fsc):
     coord_lists = [coord_list]
     trace_gg, trace_gr, trace_rr, trace_bb, trace_bg, trace_br, i = loader.cal_intensity(coord_lists[0], maxf, minf, fsc)

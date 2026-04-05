@@ -122,11 +122,9 @@ def register_update_fig(app, fsc):
         if "loadp" in changed_id:
             fsc.set("load_progress", "0")
             
-            # New add
             # 🌟 ADD THESE TWO LINES: Clear zoom memory on new load
             gs.x_range = None
             gs.y_range = None
-
             gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc, camera_size = camera_size)
             current_fig = create_initial_figure(gs.image_g, minf, maxf, radius)
             gs.blob_disable = False
@@ -235,7 +233,6 @@ def register_update_fig(app, fsc):
 
 
         # 🌟 1. CHANGE THIS TO EXACTLY MATCH RELAYOUT (ZOOM/PAN)
-        # if changed_id == "graph.relayoutData":
         if 'graph.relayoutData' in triggered_ids and len(triggered_ids) == 1:
             if isinstance(relayout, dict):
                 # Save the exact zoom coordinates!
