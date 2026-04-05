@@ -122,11 +122,9 @@ def register_update_fig(app, fsc):
         if "loadp" in changed_id:
             fsc.set("load_progress", "0")
             
-            # New add
             # 🌟 ADD THESE TWO LINES: Clear zoom memory on new load
             gs.x_range = None
             gs.y_range = None
-
             gs.loader, gs.image_g, gs.image_r, gs.image_b, gs.image_datas = load_path(thres, path, fsc, camera_size = camera_size)
             current_fig = create_initial_figure(gs.image_g, minf, maxf, radius)
             gs.blob_disable = False
@@ -138,7 +136,6 @@ def register_update_fig(app, fsc):
 
 
         # 3. SET BASE ARRAYS USING THE PRIORITIZED CAMERA SIZE
-        # ---------------------------------------------------------
         channel_dict = {
             "green": gs.image_g if gs.image_g is not None else np.zeros((1, camera_size, camera_size)),
             "red": gs.image_r if gs.image_r is not None else np.zeros((1, camera_size, camera_size)),
@@ -236,7 +233,6 @@ def register_update_fig(app, fsc):
 
 
         # 🌟 1. CHANGE THIS TO EXACTLY MATCH RELAYOUT (ZOOM/PAN)
-        # if changed_id == "graph.relayoutData":
         if 'graph.relayoutData' in triggered_ids and len(triggered_ids) == 1:
             if isinstance(relayout, dict):
                 # Save the exact zoom coordinates!
@@ -263,31 +259,18 @@ def register_update_fig(app, fsc):
                         gs.org_size = new_size
                         gs.dr = radius * new_size
                         
-                        # Fix the lag: Use Dash Patch to update ONLY the marker sizes!
+                        # Update the marker sizes in the current figure directly!
                         if np.any(np.array(gs.coord_list)):
-                            patched_fig = Patch()
                             new_marker_size = 2 * gs.dr + 1
                             color = '#1f77b4' if int(reverse) == 0 else 'yellow'
 
                             for trace_idx in [1, 2, 3]:
-                                patched_fig["data"][trace_idx]["marker"]["size"] = new_marker_size
-                                patched_fig["data"][trace_idx]["marker"]["color"] = color
+                                if len(current_fig.data) > trace_idx:
+                                    current_fig.data[trace_idx].marker.size = new_marker_size
+                                    current_fig.data[trace_idx].marker.color = color
 
-                                # New added
-                                # 👉 FIX 2: Save the new size to the background figure!
-                                # Without this, moving a slider sends the old unzoomed sizes back to the browser.
-                                if len(gs.fig.data) > trace_idx:
-                                    gs.fig.data[trace_idx].marker.size = new_marker_size
-                                    gs.fig.data[trace_idx].marker.color = color
-
-                            return (patched_fig, no_update, no_update, no_update, no_update,
-                                    no_update, no_update, no_update, no_update, no_update, 
-                                    no_update, no_update, no_update, no_update, no_update, no_update)
-                    else:
-                        # If the user just panned, new_size == gs.org_size.
-                        return (no_update, no_update, no_update, no_update, no_update,
-                                no_update, no_update, no_update, no_update, no_update, 
-                                no_update, no_update, no_update, no_update, no_update, no_update)
+                    # Notice we DO NOT return early anymore! 
+                    # We let the code flow to the bottom to update the image pixels.
 
                 except Exception as e:
                     logging.exception("Error during relayout: %s", e)
@@ -352,7 +335,6 @@ def register_update_fig(app, fsc):
             # 2. Safely convert coordinates to a numpy array
             coords_to_use = np.array(gs.coord_list) if gs.coord_list else np.empty((0,))
 
-            # 3. Update the background colorscale
             # 3. Update the background colorscale directly
             if int(reverse) == 0:
                 current_fig.data[0].colorscale = 'gray'
@@ -368,7 +350,48 @@ def register_update_fig(app, fsc):
         start_idx = max(0, end_idx - int(average_frame))
 
         smooth_image = np.average(channel_dict[channel][start_idx:end_idx], axis=0)
-        current_fig.data[0].z = smooth_image
+
+        # --- SMART ZOOM RULE ---
+        import cv2
+        max_y, max_x = smooth_image.shape
+        target_size = 512
+
+        # 1. Determine viewing area based on saved zoom
+        if getattr(gs, 'x_range', None) is not None and getattr(gs, 'y_range', None) is not None:
+            x0 = max(0, int(min(gs.x_range)))
+            x1 = min(max_x, int(max(gs.x_range)))
+            y0 = max(0, int(min(gs.y_range)))
+            y1 = min(max_y, int(max(gs.y_range)))
+            # Prevent 0-width slices
+            if x1 <= x0: x1 = x0 + 1
+            if y1 <= y0: y1 = y0 + 1
+        else:
+            x0, x1 = 0, max_x
+            y0, y1 = 0, max_y
+
+        # 2. Slice the massive image down to ONLY what the user is looking at
+        cropped_frame = smooth_image[y0:y1, x0:x1]
+
+        # 3. Compress if looking at a large area, otherwise send raw pixels!
+        if cropped_frame.shape[0] > target_size or cropped_frame.shape[1] > target_size:
+            display_frame = cv2.resize(
+                cropped_frame.astype(np.float32), 
+                (target_size, target_size), 
+                interpolation=cv2.INTER_AREA
+            )
+            x_coords = np.linspace(x0, x1, target_size)
+            y_coords = np.linspace(y0, y1, target_size)
+        else:
+            # Zoomed in tightly: Use the raw pixels!
+            display_frame = cropped_frame.astype(np.float32)
+            x_coords = np.linspace(x0, x1, cropped_frame.shape[1])
+            y_coords = np.linspace(y0, y1, cropped_frame.shape[0])
+
+        # 4. Map the new pixels to the exact coordinates on the Plotly graph
+        current_fig.data[0].z = display_frame
+        current_fig.data[0].x = x_coords
+        current_fig.data[0].y = y_coords
+        # -----------------------
 
         current_fig.data[0].zmax = maxf
         current_fig.data[0].zmin = minf
@@ -378,8 +401,6 @@ def register_update_fig(app, fsc):
         else:
             current_fig.update_traces(customdata= [], selector=dict(name='blobs_r'))
             current_fig.update_traces(customdata= [], selector=dict(name='blobs_g'))
-
-
 
         slider_max = channel_dict[channel].shape[0]
         snap_g_max = max(channel_dict["green"].shape[0]-1, 0)
@@ -413,44 +434,3 @@ def register_update_fig(app, fsc):
 
     return register_update_fig
 
-
-# old version
-
-# 1. Figure out what triggered the callback
-# ctx = callback_context
-# if not ctx.triggered:
-#     changed_id = 'No clicks yet'
-# else:
-#     changed_id = ctx.triggered[0]['prop_id']
-
-
-# if 'reverse.value' in changed_id:
-#     if int(reverse) == 0:
-#         current_fig.update_traces(colorscale='gray', selector=dict(type='heatmap'))
-#         current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
-#     else:
-#         current_fig.update_traces(colorscale='gray_r', selector=dict(type='heatmap'))
-#         current_fig = draw_blobs(current_fig, gs.coord_list, gs.dr, reverse)
-
-# old version
-# if "graph" in changed_id:
-#     if isinstance(relayout, dict) and "xaxis.range[1]" in relayout:
-#         try:
-#             size = np.round(512 / (relayout["xaxis.range[1]"] - relayout["xaxis.range[0]"]), 2)
-#             if size != gs.org_size:
-#                 gs.org_size = size
-#                 gs.dr = radius * size
-#                 if np.any(np.array(gs.coord_list)):
-#                     current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)
-#         except Exception as e:
-#             logging.exception("Error during relayout: %s", e)
-
-#     if isinstance(clickData, dict): #maybe can add new tool(add new blob)
-#         if clickData["points"][0]["curveNumber"] in [1,2,3]:
-#             if aoi_mode == 0:
-#                 remove_id = clickData["points"][0]["pointNumber"]
-#                 gs.rem_list.append(gs.coord_list[remove_id])
-#                 gs.rem_list_blob.append(gs.blob_list[remove_id])
-#                 gs.coord_list = np.delete(np.array(gs.coord_list), remove_id, axis=0).tolist()
-#                 gs.blob_list.pop(remove_id)
-#                 current_fig = draw_blobs(current_fig, np.array(gs.coord_list), gs.dr, reverse)

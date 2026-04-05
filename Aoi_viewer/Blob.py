@@ -1,11 +1,15 @@
 import numpy as np
 import lmfit
 import matplotlib.pyplot as plt
+from skimage import io, filters, measure, morphology
+import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from skimage.morphology import h_maxima
 import os
 
 class Blob():
+    # 🌟 SPEED FIX 1: Create the 9x9 coordinate grid ONCE for all blobs, not 3x per blob!
+    GRID_Y, GRID_X = np.mgrid[0:9, 0:9]
     
     def __init__(self, raw_blob = None, M = None, Mb = None):
         
@@ -71,18 +75,7 @@ class Blob():
             self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
             self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 684)
             self.coords[1] = [round(self.org_y), round(self.org_x) + 342]
-            
-        # old version
-        # channel_w = total_width // 3
-        
-        # # Red Channel (Left)
-        # self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
-        
-        # # Blue Channel (Right) - Shift is exactly 2/3 of total width
-        # self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = channel_w * 2)
-        
-        # # Green Channel (Middle) - Shift is exactly 1/3 of total width
-        # self.coords[1] = [round(self.org_y), round(self.org_x) + channel_w]
+
 
 
     def check_bound(self, image_shape):
@@ -123,29 +116,6 @@ class Blob():
             #check blue
             if (self.coords[2][1] - r - 1) < 684 or (self.coords[2][1] + r + 1) > 1023 or (self.coords[2][0] - r) < 92 or (self.coords[2][0] + r) > 978:
                 self.quality = 0
-        
-
-        # old version
-        # channel_w = w // 3
-        # # 1. Check Original/Red Channel Boundary (0 to channel_w)
-        # if (self.org_x - r) < 1 or (self.org_x + r) > (channel_w - 1) or \
-        #    (self.org_y - r) < 1 or (self.org_y + r) > (h - 1):
-        #     self.quality = 0
-
-        # # 2. Check Red Mapping (Coords[0])
-        # if (self.coords[0][1] - r) < 2 or (self.coords[0][1] + r) > (channel_w - 1) or \
-        #    (self.coords[0][0] - r) < 2 or (self.coords[0][0] + r) > (h - 2):
-        #     self.quality = 0
-        
-        # # 3. Check Green Mapping (Coords[1]) (channel_w to 2*channel_w)
-        # if (self.coords[1][1] - r) < (channel_w + 2) or (self.coords[1][1] + r) > (2 * channel_w - 2) or \
-        #    (self.coords[1][0] - r) < 2 or (self.coords[1][0] + r) > (h - 2):
-        #     self.quality = 0
-
-        # # 4. Check Blue Mapping (Coords[2]) (2*channel_w to w)
-        # if (self.coords[2][1] - r - 1) < (2 * channel_w + 2) or (self.coords[2][1] + r + 1) > (w - 1) or \
-        #    (self.coords[2][0] - r) < 2 or (self.coords[2][0] + r) > (h - 2):
-        #     self.quality = 0
 
 
     def check_max(self, dcombined_image, ratio_thres):
@@ -154,9 +124,6 @@ class Blob():
         r = 3
         aoi = dcombined_image[self.org_y - r : self.org_y + r + 1, self.org_x  - r : self.org_x + r + 1]
         
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from skimage import io, filters, measure, morphology
 
         def classify_blob_shape(image, ratio_thres = 1.25):
             """
@@ -242,8 +209,25 @@ class Blob():
         self.params['sigmay'].set(value = self.sigma[ch][0], vary = False)
         self.params['sigmax'].set(value = self.sigma[ch][1], vary = False)
 
+
+
+    def residual(self, params, y, x, data):
+        # 🌟 SPEED FIX 2: Pure numpy math, no heavy 'Model' objects
+        v = params.valuesdict() 
         
-    def gaussian_fit(self, ch, nfev = 150, laser = None):
+        dy = y - v['centery']
+        dx = x - v['centerx']
+        
+        sy2 = 2 * (v['sigmay']**2)
+        sx2 = 2 * (v['sigmax']**2)
+        
+        model = v['amplitude'] * np.exp(-(dy**2 / sy2 + dx**2 / sx2))
+        
+        # .ravel() is faster than .flatten() 
+        return (data - model).ravel()
+    
+
+    def gaussian_fit(self, ch, nfev=150, laser=None):
         if self.quality == 0:
             return None
         
@@ -253,43 +237,56 @@ class Blob():
             'blue' : 2
         }   
         
-        laser_dict = {'red' :  self.dframe_r,
-                    'green' :  self.dframe_g,
-                    'blue' :  self.dframe_b}
+        laser_dict = {
+            'red' :  self.dframe_r,
+            'green' :  self.dframe_g,
+            'blue' :  self.dframe_b
+        }
         
-        if laser == None:
+        if laser is None:
             laser = ch
-        ch = channel_dict[ch] 
+            
+        ch_idx = channel_dict[ch] 
         image = laser_dict[laser]
-        thres = np.median(image)*81
+        thres = np.median(image) * 81
         
         r = 4
-        y = int(np.round(self.coords[ch][0]))
-        x = int(np.round(self.coords[ch][1]))
-        z = image[y-r:y+r+1,x-r:x+r+1].flatten()
-        sum = np.sum(z)
+        y = int(np.round(self.coords[ch_idx][0]))
+        x = int(np.round(self.coords[ch_idx][1]))
+        
+        # Get the 2D patch for the math
+        patch = image[y-r:y+r+1, x-r:x+r+1]
+        z = patch.ravel()
+        sum_val = np.sum(z)
 
-        if sum > thres: 
-            yr = np.arange(0, 9)
-            xr = np.arange(0, 9)
-            yr, xr = np.meshgrid(yr, xr, indexing='ij')
-            yr = yr.flatten()
-            xr = xr.flatten()
+        if sum_val > thres: 
+            # 🌟 SPEED FIX 3: Low-level minimization using the shared grids!
+            result = lmfit.minimize(
+                self.residual, 
+                self.params, 
+                args=(Blob.GRID_Y, Blob.GRID_X, patch), 
+                max_nfev=nfev
+            )
             
-            model = lmfit.models.Gaussian2dModel()
+            # Extract values super fast
+            v = result.params.valuesdict()
+            
+            self.redchi[ch_idx] = result.redchi
+            
+            # Calculate R-squared manually (much faster than Model.fit())
+            ss_res = np.sum(result.residual**2)
+            ss_tot = np.sum((z - np.mean(z))**2)
+            self.rs[ch_idx] = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+            
+            self.sum[ch_idx] = v['amplitude']
+            self.nfev[ch_idx] = result.nfev
+            self.sigma[ch_idx] = [v['sigmay'], v['sigmax']]
+            self.center[ch_idx] = [v['centery'], v['centerx']]
 
-            result = model.fit(z, y = yr, x = xr, params = self.params, max_nfev = nfev)
-            self.redchi[ch] = result.redchi
-            self.rs[ch] = result.rsquared
-            self.sum[ch] = result.best_values['amplitude']
-            self.nfev[ch] = result.nfev
-            self.sigma[ch] = [result.best_values['sigmay'], result.best_values['sigmax']]
-            self.center[ch] = [result.best_values['centery'], result.best_values['centerx']]
-
-            if self.redchi[ch] > 1:
-                self.coords[ch] = [y + result.best_values['centery'] - 4, x + result.best_values['centerx'] - 4]
-                self.shift[ch] = self.coords[ch] - np.round(self.coords[ch])
-                self.coords[ch] = np.round(self.coords[ch])
+            if self.redchi[ch_idx] > 1:
+                self.coords[ch_idx] = [y + v['centery'] - 4, x + v['centerx'] - 4]
+                self.shift[ch_idx] = self.coords[ch_idx] - np.round(self.coords[ch_idx])
+                self.coords[ch_idx] = np.round(self.coords[ch_idx])
                 
 
     def check_fit(self, ratio_thres):

@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import concurrent.futures
 import bm3d
 import time
 from skimage.feature import blob_dog
@@ -11,7 +12,6 @@ from tqdm import tqdm
 import scipy.ndimage
 import cv2
 from Blob import Blob
-import os
 
 
 
@@ -75,23 +75,56 @@ class Image_Loader():
 
         return np.average(bac, axis=0)
 
-# 這裡在算背景
-    def cal_bac_med(self, image, size = 31, fsc = None, fsc_anchor = None, fsc_total = None):
-        max = np.quantile(image, 0.9)
-        min = np.min(image)
-        image = (image - min) / (max - min) * 255
-        image_8 = np.clip(image, 0, 255).astype(np.uint8)
-        aves = np.zeros_like(image)
-        for bt in tqdm(range(image.shape[0])):
-            bac_temp = image_8[bt]
-            ave = cv2.medianBlur(bac_temp, size)
-            aves[bt] = ave /255 * (max-min) + min
-            try:
-                fsc.set("load_progress", str(fsc_anchor + (bt / image.shape[0] / fsc_total)))
-            except:
-                pass
-        return aves
 
+    def cal_bac_med(self, image, size=31, fsc=None, fsc_anchor=None, fsc_total=None):
+        # 1. SPEED FIX: Calculate quantile on a 10% sample of the video instead of the whole thing
+        val_max = np.quantile(image[::10], 0.9) 
+        val_min = np.min(image)
+        
+        # Pre-calculate math multipliers to save time inside the loop
+        mult = (val_max - val_min) / 255.0
+        
+        image = image.astype(np.float32, copy=True)
+        image -= val_min
+        image /= (val_max - val_min)
+        image *= 255
+        image_8 = np.clip(image, 0, 255).astype(np.uint8)
+        
+        aves = np.zeros_like(image)
+        n_frames = image_8.shape[0]
+
+        # Helper function for multi-threading
+        def process_frame(bt):
+            ave = cv2.medianBlur(image_8[bt], size)
+            # Revert the scale instantly
+            return bt, (ave.astype(np.float32) * mult) + val_min
+
+        # 2. SPEED FIX: Run the blur on multiple CPU cores at the same time
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Submit all frames to be processed instantly
+            futures = {executor.submit(process_frame, i): i for i in range(n_frames)}
+            
+            # Gather results as they finish
+            for count, future in enumerate(tqdm(concurrent.futures.as_completed(futures), total=n_frames)):
+                bt, processed_frame = future.result()
+                aves[bt] = processed_frame
+                
+                # 3. SPEED FIX: Only write to the File System Cache every 10 frames to stop hard drive lag
+                if count % 10 == 0 and fsc is not None:
+                    try:
+                        fsc.set("load_progress", str(fsc_anchor + (count / n_frames / fsc_total)))
+                    except Exception:
+                        pass
+        
+        # Final progress update at 100%
+        if fsc is not None:
+            try:
+                fsc.set("load_progress", str(fsc_anchor + (1.0 / fsc_total)))
+            except Exception:
+                pass
+
+        return aves
+    
 
     def affine(self, x,y,M):
         x1 = M[0][0] * x + M[0][1] * y + M[0][2]
@@ -197,12 +230,20 @@ class Image_Loader():
             nframes_true = int(file[r'/vid/nframes'][0][0])
             self.width=int(file[r'/vid/width/'][0][0])
             self.height=int(file[r'/vid/height/'][0][0])
+
+            # If the actual data size does not match the size the user selected in the Tab:
+            if self.width != self.camera_size or self.height != self.camera_size:
+                raise ValueError(
+                    f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                    f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                )
+            
             filenumber=file[r'/vid/filenumber/'][:].flatten().astype('int')
             gfilename = str(filenumber[0]) + '.glimpse'
             gfile_path = path_g+r'\\'+gfilename
             time_g, first = self.cal_time_g(path_g, self.g_start, self.g_length)
-            image_g = np.fromfile(gfile_path, dtype=(np.dtype('>i2') , (self.height, self.width)))
-
+            image_g_first = np.fromfile(gfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_g_first]
 
             for n in tqdm(range(1, 10)):
                 try:
@@ -210,12 +251,14 @@ class Image_Loader():
                     gfile_path = path_g+r'\\'+gfilename
                     size = os.path.getsize(gfile_path)
                     if size>0:
-                        image_g_1 = np.fromfile(gfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_g = np.concatenate((image_g, image_g_1))
+                        image_g_next = np.fromfile(gfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_g_next) # Append to list instead of concatenating
+
                 except:
                     pass
-    
-            image_g = image_g + 2**15
+            image_g = np.concatenate(image_list)
+            image_g = image_g.astype(np.float32)
+            image_g += 2**15
             print(f'Calculating g Backgrounds with mode {bac_mode}') 
             fsc_anchor = 0
             self.bac_g = self.cal_bac_med(image_g, 27, fsc, fsc_anchor, fsc_total) 
@@ -233,25 +276,38 @@ class Image_Loader():
             if first == None:
                 self.width=int(file[r'/vid/width/'][0][0])
                 self.height=int(file[r'/vid/height/'][0][0])
+
+                # If the actual data size does not match the size the user selected in the Tab:
+                if self.width != self.camera_size or self.height != self.camera_size:
+                    raise ValueError(
+                        f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                        f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                    )
+                
                 time_r, first = self.cal_time_g(path_r, self.r_start, self.r_length)
             else:
                 time_r = self.cal_time(path_r, self.r_start, self.r_length, first)
-            image_r = np.fromfile(rfile_path, dtype=(np.dtype('>i2') , (self.height,self.width))) 
+
+            image_r_first = np.fromfile(rfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_r_first]
+
             for n in range (1, 10):
                 try:
                     rfilename = str(n) + '.glimpse'
                     rfile_path = path_r + r'\\'+rfilename
                     size = os.path.getsize(rfile_path)
                     if size>0:
-                        image_r_1 = np.fromfile(rfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_r = np.concatenate((image_r, image_r_1))
+                        image_r_next = np.fromfile(rfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_r_next) # Append to list instead of concatenating
                 except:
                     pass
-            image_r = image_r + 2**15
+            image_r = np.concatenate(image_list)
+            image_r = image_r.astype(np.float32)
+            image_r += 2**15
 
             print(f'Calculating r Backgrounds with mode {bac_mode}')
             fsc_anchor = (g_finished + r_finished) / (g_exists + r_exists)  
-            self.bac_r = self.cal_bac_med(image_r, 27, fsc, fsc_anchor, fsc_total) #smaller
+            self.bac_r = self.cal_bac_med(image_r, 27, fsc, fsc_anchor, fsc_total)
             try:
                 fsc.set("load_progress", '0')
             except:
@@ -270,10 +326,22 @@ class Image_Loader():
             if first == None:   
                 self.width=int(file[r'/vid/width/'][0][0])
                 self.height=int(file[r'/vid/height/'][0][0])
+                
+                # If the actual data size does not match the size the user selected in the Tab:
+                if self.width != self.camera_size or self.height != self.camera_size:
+                    raise ValueError(
+                        f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
+                        f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                    )
+                
                 time_b, first = self.cal_time_g(path_b, self.b_start, self.b_length)
             else:
                 time_b = self.cal_time(path_b, self.b_start, self.b_length, first)
-            image_b = np.fromfile(bfile_path, dtype=(np.dtype('>i2') , (self.height, self.width)))
+
+            image_b_first = np.fromfile(bfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+            image_list = [image_b_first]
+
+            
             
             for n in range (1, 10):
                 try:
@@ -281,21 +349,17 @@ class Image_Loader():
                     bfile_path = path_b+r'\\'+bfilename
                     size = os.path.getsize(bfile_path)
                     if size>0:
-                        image_b_1 = np.fromfile(bfile_path, dtype=(np.dtype('>i2') , (self.height,self.width)))
-                        image_b = np.concatenate((image_b, image_b_1))
+                        image_b_next = np.fromfile(bfile_path, dtype=(np.dtype('>i2'), (self.height, self.width)))
+                        image_list.append(image_b_next) # Append to list instead of concatenating
                 except:
                     pass
 
-
-            image_b = image_b + 2**15   
+            image_b = np.concatenate(image_list)
+            image_b = image_b.astype(np.float32)
+            image_b += 2**15  
             fsc_anchor = (g_finished + r_finished + b_finished) / (g_exists + r_exists + b_exists)  
             self.bac_b = self.cal_bac_med(image_b, 27, fsc, fsc_anchor, fsc_total) 
-        ###
-
-
-
-        #rescale image intensity and remove background
-
+        
         self.image_g = image_g
         self.image_r = image_r
         self.image_b = image_b
@@ -308,183 +372,180 @@ class Image_Loader():
         
         return  time_g, time_r, time_b, nframes_true
     
-    
-    
-    def gen_dimg(self, anchor, mpath, maxf = 420, minf = 178, laser = 'green', average_frame = 20):
+
+
+    def gen_dimg(self, anchor, mpath, maxf=420, minf=178, laser='green', average_frame=20):
         
-        if mpath == None:
+        if mpath is None:
             mpath = self.mpath
-        self.mpath = mpath
+            
+        # 1. SPEED FIX: Only load the map matrices from disk ONCE!
+        if getattr(self, 'M', None) is None or getattr(self, 'Mb', None) is None or self.mpath != mpath:
+            self.mpath = mpath
+            self.M = np.load(os.path.join(mpath, 'map_g_r.npy'))
+            self.Mb = np.load(os.path.join(mpath, 'map_g_b.npy'))
 
         dframe_g = 0
         dframe_b = 0
         dframe_r = 0
 
-        if  (self.r_exists == 1):
-            end = min(self.image_r.shape[0], anchor + average_frame)
+        # Helper function to get the averaged, un-denoised frame
+        def get_avg_frame(image_stack):
+            end = min(image_stack.shape[0], anchor + average_frame)
             start = max(0, end - average_frame)
-            frame_r = np.average(self.image_r[start:end], axis = 0)
-            frame_r = rescale_intensity(frame_r,in_range = (minf,maxf), out_range=np.ubyte)
-            dframe_r = bm3d.bm3d(frame_r, 6, stage_arg = bm3d.BM3DStages.HARD_THRESHOLDING)
+            frame = np.average(image_stack[start:end], axis=0)
+            return rescale_intensity(frame, in_range=(minf, maxf), out_range=np.ubyte)
+
+        # --- SMART BM3D FILTERING ---
+        # Only run the heavy BM3D algorithm on the explicitly chosen laser.
+        # Pass the normal, fast averaged frames for the other channels!
+
+        if self.r_exists == 1:
+            frame_r = get_avg_frame(self.image_r)
+            if laser == 'red':
+                dframe_r = bm3d.bm3d(frame_r, 6, stage_arg=bm3d.BM3DStages.HARD_THRESHOLDING)
+            else:
+                dframe_r = frame_r  # Skip BM3D!
         
-        if  (self.g_exists == 1):
-            end = min(self.image_g.shape[0], anchor + average_frame)
-            start = max(0, end - average_frame)
-            frame_g = np.average(self.image_g[start:end], axis = 0)
-            frame_g = rescale_intensity(frame_g, in_range = (minf,maxf), out_range = np.ubyte)
-            dframe_g = bm3d.bm3d(frame_g, 6, stage_arg = bm3d.BM3DStages.HARD_THRESHOLDING)
+        if self.g_exists == 1:
+            frame_g = get_avg_frame(self.image_g)
+            if laser == 'green':
+                dframe_g = bm3d.bm3d(frame_g, 6, stage_arg=bm3d.BM3DStages.HARD_THRESHOLDING)
+            else:
+                dframe_g = frame_g  # Skip BM3D!
 
+        if self.b_exists == 1:
+            frame_b = get_avg_frame(self.image_b)
+            if laser == 'blue':
+                dframe_b = bm3d.bm3d(frame_b, 6, stage_arg=bm3d.BM3DStages.HARD_THRESHOLDING)
+            else:
+                dframe_b = frame_b  # Skip BM3D!
+        # -----------------------------
 
-        if  (self.b_exists == 1):
-            end = min(self.image_b.shape[0], anchor + average_frame)
-            start = max(0, end - average_frame)
-            frame_b = np.average(self.image_b[start:end], axis = 0)
-            frame_b = rescale_intensity(frame_b,in_range = (minf,maxf), out_range = np.ubyte)
-            dframe_b = bm3d.bm3d(frame_b, 6, stage_arg = bm3d.BM3DStages.HARD_THRESHOLDING)
-
-
-
-        laser_dict = {'green' :  dframe_g,
-                    'blue' :  dframe_b,
-                    'red' :  dframe_r
-                    }
+        laser_dict = {
+            'green': dframe_g,
+            'blue': dframe_b,
+            'red': dframe_r
+        }
 
         print(laser)
         dframe = laser_dict[laser] 
 
-
-        #combine two channel image
-        self.M = np.load(mpath + r'\map_g_r.npy')
-        self.Mb = np.load(mpath + r'\map_g_b.npy')
-
-        print(dframe)
-
-        split_1 = int(self.camera_size / 3)          # e.g., 170 for 512, or 341 for 1024
-        split_2 = int((self.camera_size / 3) * 2)    # e.g., 341 for 512, or 682 for 1024
+        split_1 = int(self.camera_size / 3)          
+        split_2 = int((self.camera_size / 3) * 2)    
 
         left_image  = dframe[0:self.height, 0:split_1]
         right_image = dframe[0:self.height, (split_1 + 1):split_2]
         blue_image  = dframe[0:self.height, (split_2 + 1):self.camera_size]
-        
 
         rows, cols = right_image.shape
         
-        left_image_trans = cv2.warpAffine(left_image, self.M, (cols, rows), flags = cv2.WARP_INVERSE_MAP)
-        blue_image_trans = cv2.warpAffine(blue_image, self.Mb, (cols, rows), flags = cv2.WARP_INVERSE_MAP)
+        left_image_trans = cv2.warpAffine(left_image, self.M, (cols, rows), flags=cv2.WARP_INVERSE_MAP)
+        blue_image_trans = cv2.warpAffine(blue_image, self.Mb, (cols, rows), flags=cv2.WARP_INVERSE_MAP)
             
-        
         dcombined_image = (right_image + left_image_trans + blue_image_trans)
         self.dcombined_image = dcombined_image
-
     
         self.dframe = dframe
-
-        if self.b_exists:
-            self.dframe_b = dframe_b
-        else:
-            self.dframe_b = dframe
-
-        if self.g_exists:
-            self.dframe_g = dframe_g
-        else:
-            self.dframe_g = dframe
-        
-        if self.r_exists:
-            self.dframe_r = dframe_r
-        else:
-            self.dframe_r = dframe
+        self.dframe_b = dframe_b if self.b_exists else dframe
+        self.dframe_g = dframe_g if self.g_exists else dframe
+        self.dframe_r = dframe_r if self.r_exists else dframe
 
         return dframe, dcombined_image
-
+    
 
     
-    
-    def det_blob(self, plot = False, fsc = None, thres = None, r = 3, ratio_thres = 1.3):
-        if thres != None:
+    def det_blob(self, plot=False, fsc=None, thres=None, r=3, ratio_thres=1.3):
+        if thres is not None:
             self.thres = thres
 
         print('Finding blobs')      
-        blobs_dog = blob_dog(self.dcombined_image, min_sigma= (r-1) /sqrt(2), max_sigma = (r) /sqrt(2), threshold = self.thres, overlap = 0.8, exclude_border = 2)
+        blobs_dog = blob_dog(self.dcombined_image, min_sigma=(r-1)/sqrt(2), max_sigma=(r)/sqrt(2), threshold=self.thres, overlap=0.8, exclude_border=2)
         sorted_indices = np.lexsort((blobs_dog[:, 1], blobs_dog[:, 0]))
         blobs_dog = blobs_dog[sorted_indices]
-        print(f'Found {blobs_dog.shape[0]} preliminary blobs')
+        
+        total_blobs = blobs_dog.shape[0]
+        print(f'Found {total_blobs} preliminary blobs')
 
-    
-
-        if plot == True:
+        if plot:
             self.plot_circled(blobs_dog)
 
         blob_list = []
 
-
-
-        try:
-                fsc.set("cal_progress", str(0))
-        except:
-                pass
-        
-        self.cpath=os.path.join(self.path,r'circled')
-        
-        for i, raw_blob in enumerate(tqdm(blobs_dog)):
-
+        if fsc is not None:
             try:
-                fsc.set("progress", str(i / (blobs_dog.shape[0]-1)))
-            except:
+                fsc.set("cal_progress", "0")
+            except Exception:
                 pass
+        
+        self.cpath = os.path.join(self.path, 'circled')
+        
+        # 3. SPEED FIX (CRITICAL): Move this OUTSIDE the loop! 
+        # You only need to save the image once, not 1000 times!
+        np.save(os.path.join(self.path, 'dcombined_image.npy'), self.dcombined_image)
+
+        for i, raw_blob in enumerate(tqdm(blobs_dog)):
+            if i % 20 == 0 and fsc is not None:
+                try:
+                    fsc.set("progress", str(i / max(1, total_blobs - 1)))
+                except Exception:
+                    pass
             
             b = Blob(raw_blob, self.M, self.Mb)
-            b.map_coord(image_shape = self.image_g.shape)
-            b.check_bound(image_shape = self.image_g.shape)
+            b.map_coord(image_shape=self.image_g.shape)
+            b.check_bound(image_shape=self.image_g.shape)
 
-            b.set_image(self.dframe_r, laser = 'red')
-            b.set_image(self.dframe_g, laser = 'green')
-            b.set_image(self.dframe_b, laser = 'blue')
+            b.set_image(self.dframe_r, laser='red')
+            b.set_image(self.dframe_g, laser='green')
+            b.set_image(self.dframe_b, laser='blue')
 
             b.check_max(self.dcombined_image, ratio_thres)
-            np.save(self.path + r'\\dcombined_image.npy', self.dcombined_image)
-
+            
             # 🌟 SPEED FIX 1: If check_max rejected it, skip ALL fitting!
             if b.quality == 0:
                 continue
 
             if self.r_exists or self.g_exists or self.b_exists:
-                b.gaussian_fit(ch = 'red')
+                b.gaussian_fit(ch='red')
             elif self.g_exists:
-                b.gaussian_fit(ch = 'red', laser = 'green')
+                b.gaussian_fit(ch='red', laser='green')
             elif self.b_exists:
-                b.gaussian_fit(ch = 'red', laser = 'blue')
+                b.gaussian_fit(ch='red', laser='blue')
             
             # 🌟 SPEED FIX 2: If the Red fit failed, skip the Green and Blue fits!
             if b.quality == 0:
                 continue
             
             if self.g_exists:
-                b.gaussian_fit(ch = 'green')
+                b.gaussian_fit(ch='green')
             elif self.b_exists:
-                b.gaussian_fit(ch = 'green', laser = 'blue')
+                b.gaussian_fit(ch='green', laser='blue')
 
             # 🌟 SPEED FIX 3: If the Green fit failed, skip the Blue fit!
             if b.quality == 0:
                 continue
 
             if self.b_exists:
-                b.gaussian_fit(ch = 'blue')
-
-            #b.check_fit(ratio_thres)
+                b.gaussian_fit(ch='blue')
 
             if b.quality == 1:
-                #coord_list.append(b.get_coord())
                 blob_list.append(b)
-                if plot == True:
+                if plot:
                     b.plot_circle(self.cpath, self.dframe_g, self.dframe_b, i)
             
-        print(f'Found {len(blob_list)} filterd blobs')
+        print(f'Found {len(blob_list)} filtered blobs')
+        
+        # Final progress bump
+        if fsc is not None:
+            try:
+                fsc.set("progress", "1.0")
+            except Exception:
+                pass
+                
         return blob_list
     
     
     def cal_drift(self, blob_list, laser, use_ch, n_slices = None, interval = None, anchors = None):
-        
-        
         tot_coord_list_drift = []
 
         length_dict = {
@@ -619,7 +680,6 @@ class Image_Loader():
 
 
     def cal_intensity(self, coord_list, maxf = 35000, minf = 32946, fsc = None):
-        
         print('Calcultating Intensities')
 
         total_blobs = len(coord_list)
@@ -636,15 +696,21 @@ class Image_Loader():
 
         if self.g_exists == 1:
             bac_g = self.bac_g
-            image_g = (self.image_g - bac_g).astype(np.float32)
+            image_g = self.image_g.copy() 
+            image_g -= bac_g
+            image_g = image_g.astype(np.float32)
         
         if self.r_exists == 1:
             bac_r = self.bac_r
-            image_r = (self.image_r - bac_r).astype(np.float32)
+            image_r = self.image_r.copy() 
+            image_r -= bac_r
+            image_r = image_r.astype(np.float32)
         
         if self.b_exists == 1:
             bac_b = self.bac_b
-            image_b = (self.image_b - bac_b).astype(np.float32)
+            image_b = self.image_b.copy() 
+            image_b -= bac_b
+            image_b = image_b.astype(np.float32)
 
 
         self.cpath=os.path.join(self.path,r'circled')
@@ -701,8 +767,16 @@ class Image_Loader():
                 b_snap[blob_count][1] = self.image_b[:, yg-4:yg+4+1,xg-4:xg+4+1]
                 b_snap[blob_count][2] = self.image_b[:, yr-4:yr+4+1,xr-4:xr+4+1]
              
-        
-        np.savez(self.path + r'\blobs.npz', b = b_snap, g = g_snap, r = r_snap, minf = minf, maxf = maxf, yr = yr, xr = xr, yg = yg, xg = xg, yb = yb, xb = xb)
+        all_coords = np.array(coord_list)
+        np.savez(
+            os.path.join(self.path, 'blobs.npz'), 
+            b=b_snap, 
+            g=g_snap, 
+            r=r_snap, 
+            minf=minf, 
+            maxf=maxf, 
+            coords=all_coords  # 👈 This saves ALL coordinates for ALL blobs!
+        )
         
         return trace_gg, trace_gr, trace_rr, trace_bb, trace_bg, trace_br, blob_count+1
     
