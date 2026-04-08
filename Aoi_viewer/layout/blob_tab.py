@@ -56,6 +56,14 @@ def get_blob_tab(config):
                 placeholder="", style={'textAlign': 'center', 'width': '40px', "margin-left": "8px"},
                 persistence=True
             ),
+            html.Div('Min_D', style={"margin-left": "10px"}),
+            
+            # 🌟 AMENDMENT 1: Change value=6 to value=config.get('min_distance', 6)
+            dcc.Input(
+                value=config.get('min_distance', 8), 
+                id="min_distance", type="number", step=1, 
+                style={"margin-right": "10px", 'width': '40px'}, persistence=True
+            ),
         ], style={'padding': 5, 'display': 'flex', 'flex-direction': 'row'}),
 
         html.Div([

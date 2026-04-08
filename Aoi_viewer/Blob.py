@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from skimage.morphology import h_maxima
 import os
+from scipy.spatial import cKDTree
 
 class Blob():
     # 🌟 SPEED FIX 1: Create the 9x9 coordinate grid ONCE for all blobs, not 3x per blob!
@@ -75,8 +76,6 @@ class Blob():
             self.coords[0] = self.affine(self.org_y, self.org_x, self.M, x_shift = 0)
             self.coords[2] = self.affine(self.org_y, self.org_x, self.Mb, x_shift = 684)
             self.coords[1] = [round(self.org_y), round(self.org_x) + 342]
-
-
 
     def check_bound(self, image_shape):
         """
@@ -336,3 +335,30 @@ class Blob():
     def update_coord(self, coords):
         self.coords = np.array(coords[:len(self.coords.flatten())]).reshape(self.coords.shape)
         self.shift = np.array(coords[len(self.coords.flatten()):]).reshape(self.shift.shape)
+
+def remove_overlapping_blobs(blobs_dog, min_distance=9):
+    """
+    Takes an array of preliminary blobs and removes ANY blobs that are 
+    too close to each other to prevent overlapping PSFs.
+    """
+    if blobs_dog.shape[0] == 0:
+        return blobs_dog
+        
+    coords = blobs_dog[:, :2] # Extract just the Y and X coordinates
+    tree = cKDTree(coords)
+    
+    # Find all pairs of blobs that are closer than min_distance (e.g., 6 pixels)
+    close_pairs = tree.query_pairs(r=min_distance)
+    
+    # Create a list of all blobs that are touching another blob
+    bad_indices = set()
+    for i, j in close_pairs:
+        bad_indices.add(i) # Throw away the first blob
+        bad_indices.add(j) # Throw away the second blob
+        
+    # Filter the array to ONLY keep blobs that are perfectly isolated
+    good_indices = [i for i in range(blobs_dog.shape[0]) if i not in bad_indices]
+    filtered_blobs = blobs_dog[good_indices]
+    
+    print(f'Removed {len(bad_indices)} contaminated overlapping blobs.')
+    return filtered_blobs

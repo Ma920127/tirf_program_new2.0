@@ -7,6 +7,7 @@
     "maxf": 817,
     "channel": "green",
     "radius": 3,
+    "min_distance": 9,
     "leakage_g": 0.08,
     "leakage_b": 0.3,
     "f_lag": 2,

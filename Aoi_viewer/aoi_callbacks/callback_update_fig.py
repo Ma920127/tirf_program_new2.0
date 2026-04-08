@@ -60,6 +60,7 @@ def register_update_fig(app, fsc):
         [
             State("ratio_thres", "value"),
             State("radius", "value"),
+            State("min_distance", "value"),
             State("selector", "value"),
             State("move_step", "value"),
             State("path", "value"),
@@ -74,7 +75,7 @@ def register_update_fig(app, fsc):
 
     def update_fig(clickData, relayout, blob, up, down, left, right, fit_gauss, frame, anchor,
                    average_frame, loadp, minf, maxf, reverse, channel, cal_drift_bt, load_drift, cal_intensity,
-                   openp, configs, aoi_mode, graph_size_tab, ratio_thres, radius, selector,
+                   openp, configs, aoi_mode, graph_size_tab, ratio_thres, radius, min_distance, selector,
                    move_step, path, mpath, plot, thres, per_n, pairing_threshold, auto):
         gs = global_state
         current_fig = gs.fig
@@ -146,7 +147,7 @@ def register_update_fig(app, fsc):
         if "blob" in changed_id:
             fsc.set("progress", 0)
             gs.loader.gen_dimg(anchor = anchor, mpath = mpath, maxf = maxf, minf = minf, laser = channel, average_frame = average_frame)
-            blob_list = gs.loader.det_blob(plot=plot, fsc=fsc, thres=thres, r=radius, ratio_thres=float(ratio_thres))
+            blob_list = gs.loader.det_blob(plot=plot, fsc=fsc, thres=thres, r=radius, ratio_thres=float(ratio_thres), min_distance=min_distance)
             gs.blob_list = blob_list
             gs.coord_list = [b.get_coord() for b in blob_list]
             coord_array = np.array(gs.coord_list) if gs.coord_list else np.empty((0,))

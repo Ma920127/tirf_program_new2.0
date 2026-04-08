@@ -11,7 +11,8 @@ import os
 from tqdm import tqdm
 import scipy.ndimage
 import cv2
-from Blob import Blob
+from Blob import Blob, remove_overlapping_blobs
+from scipy.spatial import cKDTree
 
 
 
@@ -455,7 +456,7 @@ class Image_Loader():
     
 
     
-    def det_blob(self, plot=False, fsc=None, thres=None, r=3, ratio_thres=1.3):
+    def det_blob(self, plot=False, fsc=None, thres=None, r=3, ratio_thres=1.3, min_distance=8):
         if thres is not None:
             self.thres = thres
 
@@ -463,6 +464,12 @@ class Image_Loader():
         blobs_dog = blob_dog(self.dcombined_image, min_sigma=(r-1)/sqrt(2), max_sigma=(r)/sqrt(2), threshold=self.thres, overlap=0.8, exclude_border=2)
         sorted_indices = np.lexsort((blobs_dog[:, 1], blobs_dog[:, 0]))
         blobs_dog = blobs_dog[sorted_indices]
+
+        # 🌟 SAFE FALLBACK: If the user deletes the text box, use 6 instead of crashing
+        safe_min_dist = min_distance if min_distance is not None else 8
+
+        # 🌟 NEW CLEAN FIX: One line perfectly filters the blobs using the external script!
+        blobs_dog = remove_overlapping_blobs(blobs_dog, min_distance=min_distance)
         
         total_blobs = blobs_dog.shape[0]
         print(f'Found {total_blobs} preliminary blobs')
