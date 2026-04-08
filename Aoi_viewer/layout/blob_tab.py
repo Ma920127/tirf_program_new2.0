@@ -62,7 +62,7 @@ def get_blob_tab(config):
             dcc.Input(
                 value=config.get('min_distance', 8), 
                 id="min_distance", type="number", step=1, 
-                style={"margin-right": "10px", 'width': '40px'}, persistence=True
+                style={'textAlign': 'center', "margin-left": "8px", 'width': '40px'}, persistence=True
             ),
         ], style={'padding': 5, 'display': 'flex', 'flex-direction': 'row'}),
 
