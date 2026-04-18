@@ -1,9 +1,7 @@
 import numpy as np
-
 from dash import Dash, dcc, html, Input, Output, State, callback_context, no_update, DiskcacheManager, callback
 from dash.exceptions import PreventUpdate
 from layout import make_app
-
 from utils.trace import update_trace, change_trace
 from utils.selection import select_good_bad, select_colocalized, render_good_bad, render_colocalized
 from utils.breakpoints import breakpoints_utils, sl_bkps, find_chp
@@ -12,9 +10,7 @@ from Gaussian_mixture.gmm import fit_gmm, draw_gmm, save_gmm
 from utils.plotting import plot_fret_trace
 from utils.draw import draw
 from utils.calculate_dtime import calculate_FRET, calculate_conv, gaussian
-
 from init_fig import init_fig
-
 from loader import Loader 
 from Hidden_Markov.hmm_fitter_new import HMM_fitter 
 
@@ -73,6 +69,20 @@ color=["#fff",'yellow']
 fig, fig_blob, fig2 = init_fig() 
 app = make_app(fig, fig_blob, fig2)
 
+# --- NEW CALLBACK: UI Toggle for Savitzky-Golay ---
+@app.callback(
+    [Output('poly-container', 'style'),
+     Output('smooth', 'step')],
+    Input('smooth_method', 'value')
+)
+def toggle_poly_input(method):
+    if method == 'savgol':
+        # Show poly order, force window step to 2 (keeps window size odd)
+        return {'display': 'flex', 'flex-direction': 'row', 'align-items': 'center'}, 2
+    # Hide poly order, regular step 1
+    return {'display': 'none'}, 1
+# --------------------------------------------------
+
 @app.callback(
     Output('graph', 'figure'),
     Output('i','value'),
@@ -108,7 +118,8 @@ app = make_app(fig, fig_blob, fig2)
     Input('select','n_clicks'),
     Input('scatter', 'value'),
     Input('smooth', 'value'),
-    Input('strided', 'value'),
+    Input('smooth_method', 'value'), # Changed from 'strided'
+    Input('polyorder', 'value'),     # Added this input
     Input('rescale', 'n_clicks'),
     Input("graph", "relayoutData"),
     Input('channel', 'value'),
@@ -131,7 +142,7 @@ app = make_app(fig, fig_blob, fig2)
     )
 
 
-def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, rupture, good, bad, coloc, select, scatter, smooth, strided, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, i, path, 
+def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, rupture, good, bad, coloc, select, scatter, smooth, smooth_method, polyorder, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, i, path, 
                chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1, event):
     changed_id = [p['prop_id'] for p in callback_context.triggered][0]
     global N_traces, fig, fig2, idx, total_frame, color, good_style, bad_style, bmode
@@ -144,8 +155,8 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     if fig['layout']['uirevision'] == False:
         fig['layout']['uirevision'] = True   
     
-    strided_dict = ['moving', 'strided']
-    smooth_mode = strided_dict[int(strided)]
+    # Map smooth_method directly to smooth_mode
+    smooth_mode = smooth_method
 
     ##load path##
     if 'loadp' in changed_id:
@@ -162,10 +173,7 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     ##change trace##
     i, fig = change_trace(changed_id, event, i, N_traces, fig)
     
-    
-
     ##select good bad##
-
     select_list_g = select_good_bad(changed_id, event, i, select_list_g)
     colocalized_list = select_colocalized(changed_id, event, i, colocalized_list)
 
@@ -177,27 +185,20 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
         np.save(path+r'/selected_g.npy', select_list_g)
         np.save(path+r'/colocalized_list.npy', colocalized_list)
      
-    ##breakpoints##
-    bkps, mode, confirm_reset_show, channel_error_show = breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smooth, smooth_mode)
+    ##breakpoints## (Added polyorder)
+    bkps, mode, confirm_reset_show, channel_error_show = breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smooth, smooth_mode, polyorder)
     
     ##save / load breakpoints##
     bkps = sl_bkps(changed_id, path, bkps, mode)
 
+    # Auto-Detect Breakpoints (Added polyorder)
     bkps, channel_error_show = find_chp(changed_id, fret_g, fret_b, rr, gg, gr, bb, bg, br, i, time, select_list_g, 
              chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1,
-             bkps, smooth, smooth_mode)
+             bkps, smooth, smooth_mode, polyorder)
 
     
-    # if 'rupture' in changed_id:
-        
-    #     rup=Rupture(fret[i])
-    #     tot_bkps[i]=rup.det_bkps()      
-    #     fig.layout.shapes=[]
-    #     fig = draw(fig,tot_bkps,i,time_gr,dead_time,color,total_frame)
-        
-    
-    ##update trace##
-    fig = update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, smooth, smooth_mode, show)
+    ##update trace## (Added polyorder)
+    fig = update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, smooth, smooth_mode, show, polyorder=polyorder)
 
     ##Display Information##
     if np.any(np.array(bkps['fret_g'], dtype = object)):
@@ -261,15 +262,20 @@ def plot_and_save_fret_g(n_clicks, current_index, path):
     Input('i','value'),
     State('tabs', 'value'), 
     State('smooth', 'value'), 
-    State('strided', 'value'),
+    State('smooth_method', 'value'), # Changed from strided to smooth_method
+    State('polyorder', 'value'),
     blocking = True  
     )
-def show_blob_main(hoverData, aoi_max, i, tabs, smooth, strided):
+def show_blob_main(hoverData, aoi_max, i, tabs, smooth, smooth_method, polyorder): # <--- 2. Add it here
     global fig_blob, time
-    if tabs == 'Aois' :
-        fig_blob = show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, strided)
+    
+    if tabs == 'Aois':
+        # 3. Instead of just calculating a 'strided' boolean, pass the exact 
+        # smooth_method and polyorder straight into your show_blob function!
+        fig_blob = show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, smooth_method, polyorder)
     else:
         return fig_blob
+        
     return fig_blob
 
 
@@ -369,17 +375,4 @@ def update_Hist(fit, save, binsize, n_comps, cov_type, means, channels, path):
         
 server = app.server 
 if __name__ == '__main__':
-   app.run_server(debug = False)
-
-
-
-
-
-
-
-
-
-
-
-
-
+   app.run_server(debug = True)
