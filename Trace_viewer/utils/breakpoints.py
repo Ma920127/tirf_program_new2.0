@@ -84,12 +84,27 @@ def breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smoot
                     bkps[channel][i] = sorted(bkps[channel][i])
             elif mode == 'Remove':
                 if 10 <= c_num <= 14:
-                    rem_idx = clickData["points"][0]["pointNumber"]
-                    bkps[channel][i].pop(rem_idx)
+                    if len(bkps[channel][i]) > 0:
+                        # Find the actual time (x-coordinate) we clicked
+                        click_x = clickData["points"][0]["x"]
+                        
+                        # Find which breakpoint time (x[1]) is mathematically closest to our click
+                        diff = [abs(x[1] - click_x) for x in bkps[channel][i]]
+                        closest_idx = diff.index(min(diff))
+                        
+                        # Delete that specific breakpoint
+                        bkps[channel][i].pop(closest_idx)
+                        
             elif mode == 'Except':
                 if 10 <= c_num <= 14:
-                    exp_idx = clickData["points"][0]["pointNumber"]
-                    bkps[channel][i] = [bkps[channel][i][exp_idx]]
+                    if len(bkps[channel][i]) > 0:
+                        click_x = clickData["points"][0]["x"]
+                        
+                        diff = [abs(x[1] - click_x) for x in bkps[channel][i]]
+                        closest_idx = diff.index(min(diff))
+                        
+                        # Keep only the closest breakpoint
+                        bkps[channel][i] = [bkps[channel][i][closest_idx]]
                     
     if mode == 'Clear':
         mode = "Add"

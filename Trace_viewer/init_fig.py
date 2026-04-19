@@ -220,12 +220,12 @@ def init_fig():
     fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x4', yaxis='y3', name='rr', legend='legend3', mode='lines', line=dict(color='orange', width=3), hovertemplate=hovertemplate)) #9
 
     # --- BREAKPOINTS (Hidden from legend) ---
-    marker_style = dict(color='#FF0000', size=10, line=dict(width=2, color='white'))
-    fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x1', yaxis='y1', name='fret_g_bkps', showlegend=False, mode='markers', marker=marker_style)) #10
-    fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x3', yaxis='y2', name='fret_b_bkps', showlegend=False, mode='markers', marker=marker_style)) #11
-    fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x5', yaxis='y4', name='b_bkps', showlegend=False, mode='markers', marker=marker_style)) #12
-    fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x4', yaxis='y3', name='g_bkps', showlegend=False, mode='markers', marker=marker_style)) #13
-    fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x4', yaxis='y3', name='r_bkps', showlegend=False, mode='markers', marker=marker_style)) #14
+    marker_style = dict(color='#FF0000', size=12, line=dict(width=2, color='white'))
+    fig.add_trace(go.Scatter(x=[], y=[], xaxis='x1', yaxis='y1', name='fret_g_bkps', showlegend=False, mode='markers', marker=marker_style)) #10
+    fig.add_trace(go.Scatter(x=[], y=[], xaxis='x3', yaxis='y2', name='fret_b_bkps', showlegend=False, mode='markers', marker=marker_style)) #11
+    fig.add_trace(go.Scatter(x=[], y=[], xaxis='x5', yaxis='y4', name='b_bkps', showlegend=False, mode='markers', marker=marker_style)) #12
+    fig.add_trace(go.Scatter(x=[], y=[], xaxis='x4', yaxis='y3', name='g_bkps', showlegend=False, mode='markers', marker=marker_style)) #13
+    fig.add_trace(go.Scatter(x=[], y=[], xaxis='x4', yaxis='y3', name='r_bkps', showlegend=False, mode='markers', marker=marker_style)) #14
 
     fig.add_trace(go.Scattergl(x=[], y=[], xaxis='x1', yaxis='y1',name='HMM_fret_g', legend='legend', mode='lines', line=dict(color='orange', width=3))) #15
 
