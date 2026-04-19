@@ -1,7 +1,8 @@
 from .smoothing import uf, sa, mf, sg
 import numpy as np
+import plotly.graph_objects as go
 
-def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, lag, smooth_mode, show, polyorder=2):
+def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, lag, smooth_mode, show, polyorder=2,rup_bkps=None, channel='r',active_tab='Aois'):
     """
     Update the plot traces in the figure for the given trace index 'i' using the specified smoothing.
 
@@ -164,8 +165,83 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
             range=(min(time['g'][0], time['b'][0], time['r'][0]),
                    max(time['g'][-1], time['b'][-1], time['r'][-1]))
         ))
+
+    # ---------------------------------------------------------
+    # --- DRAW RUPTURE PREVIEW DOTS ---
+    # Put this near the end of your update_trace function
+    # ---------------------------------------------------------
+    # 1. Clear any old preview traces so they don't infinitely stack
+    fig.data = tuple(t for t in fig.data if t.name != 'Rpt Preview')
+
+    # 2. Safely cast index
+    current_i = int(i)
+
+    # 2. ONLY draw the dots if the user is actively on the Rupture tab!
+    # (Check exactly what the 'value' of your Rupture tab is in layout.py)
+    if active_tab == 'Rupture':  
+        if rup_bkps is not None and current_i < len(rup_bkps):
+            current_times = rup_bkps[current_i]
+            
+            if len(current_times) > 0:                
+
+                signal_map = {'fret_g': fret_g, 'fret_b': fret_b, 
+                'rr': rr, 'gg': gg, 'gr': gr, 'bb': bb, 'bg': bg, 'br': br,
+                'r': rr, 'g': gg, 'b': bb}
+                time_mapping = {'fret_g': 'fret_g', 'fret_b': 'fret_b',
+                    'gg': 'g', 'gr': 'g', 'rr': 'r', 
+                    'bb': 'b', 'bg': 'b', 'br': 'b',
+                    'r': 'r', 'g': 'g', 'b': 'b'}
+                
+                # THIS is the magic dictionary that moves the dots to the right panel!
+                yaxis_map = {
+                    'fret_g': 'y1', 'fret_b': 'y2', 
+                    'gg': 'y3', 'gr': 'y3', 'rr': 'y3', 
+                    'bb': 'y4', 'bg': 'y4', 'br': 'y4',
+                    'r': 'y3', 'g': 'y3', 'b': 'y4'
+                }
+                
+                if channel in signal_map:
+                    y_arr = signal_map[channel][current_i]
+                    t_key = time_mapping.get(channel, 'fret_g')
+                    t_arr = time[t_key]
+                    y_ax = yaxis_map.get(channel, 'y1')
+
+                    # 4. Apply smoothing to align with visual line
+                    if smooth_mode == 'moving': sm_time, sm_sig = uf(t_arr, lag), uf(y_arr, lag)
+                    elif smooth_mode == 'median': sm_time, sm_sig = mf(t_arr, lag), mf(y_arr, lag)
+                    elif smooth_mode == 'savgol': sm_time, sm_sig = sg(t_arr, lag, polyorder), sg(y_arr, lag, polyorder)
+                    elif smooth_mode == 'strided': sm_time, sm_sig = sa(t_arr, lag), sa(y_arr, lag)
+                    else: sm_time, sm_sig = t_arr, y_arr
+
+                    # 5. Map the exact coordinates
+                    x_points, y_points = [], []
+                    for t_val in current_times:
+                        idx = np.argmin(np.abs(sm_time - t_val))
+                        x_points.append(sm_time[idx])
+                        y_points.append(sm_sig[idx])
+
+                    # 6. Draw it using Scattergl!
+                    fig.add_trace(go.Scattergl(
+                        x=x_points, 
+                        y=y_points,
+                        mode='markers',
+                        marker=dict(color='purple', size=14, symbol='circle-open', line=dict(width=3)),
+                        name='Rpt Preview',
+                        yaxis=y_ax,
+                        showlegend=False
+                    ))
+
     
     return fig
+
+
+
+
+
+
+
+
+
 
 def clear_trace(fig, selectors):
     """
