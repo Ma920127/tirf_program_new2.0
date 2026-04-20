@@ -4,7 +4,7 @@ import ruptures as rpt
 rup_config={'model': 'l1',
             'pen' : 1,
             'min_size' : 1, 
-            'jump' : 0,
+            'jump' : 1,
     }
 
 
@@ -26,7 +26,7 @@ class Rupture:
         print('fitting:')
         
         bkps = rpt.Binseg(model=model, min_size=min_size).fit_predict(fret,pen=pen)
-        bkps=[-1,*bkps[:-2]]
+        bkps = bkps[:-1]
         print(bkps)
         
         return bkps

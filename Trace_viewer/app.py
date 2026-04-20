@@ -1,9 +1,10 @@
 import numpy as np
-
+import os
+import shutil
+import time as rtime
 from dash import Dash, dcc, html, Input, Output, State, callback_context, no_update, DiskcacheManager, callback
 from dash.exceptions import PreventUpdate
 from layout import make_app
-
 from utils.trace import update_trace, change_trace
 from utils.selection import select_good_bad, select_colocalized, render_good_bad, render_colocalized
 from utils.breakpoints import breakpoints_utils, sl_bkps, find_chp
@@ -12,12 +13,13 @@ from Gaussian_mixture.gmm import fit_gmm, draw_gmm, save_gmm
 from utils.plotting import plot_fret_trace
 from utils.draw import draw
 from utils.calculate_dtime import calculate_FRET, calculate_conv, gaussian
-
 from init_fig import init_fig
-
 from loader import Loader 
-from Hidden_Markov.hmm_fitter_new import HMM_fitter 
-
+from Hidden_Markov.hmm_fitter_new import HMM_fitter
+from Rupture import Rupture
+from utils.smoothing import uf, sa, mf, sg
+import plotly.graph_objects as go
+import traceback
 
 path = ''
 fret_g = np.zeros(0)
@@ -67,11 +69,26 @@ tot_dtime=[]
 
     
 color=["#fff",'yellow']
-
+rup_bkps = []
 
 
 fig, fig_blob, fig2 = init_fig() 
 app = make_app(fig, fig_blob, fig2)
+
+# --- NEW CALLBACK: UI Toggle for Savitzky-Golay ---
+@app.callback(
+    [Output('poly-container', 'style'),
+     Output('smooth', 'step')],
+    Input('smooth_method', 'value')
+)
+def toggle_poly_input(method):
+    if method == 'savgol':
+        # Show poly order, force window step to 2 (keeps window size odd)
+        return {'display': 'flex', 'flex-direction': 'row', 'align-items': 'center'}, 2
+    # Hide poly order, regular step 1
+    return {'display': 'none'}, 1
+# --------------------------------------------------
+
 
 @app.callback(
     Output('graph', 'figure'),
@@ -108,13 +125,16 @@ app = make_app(fig, fig_blob, fig2)
     Input('select','n_clicks'),
     Input('scatter', 'value'),
     Input('smooth', 'value'),
-    Input('strided', 'value'),
+    Input('smooth_method', 'value'), # Changed from 'strided'
+    Input('polyorder', 'value'),     # Added this input
     Input('rescale', 'n_clicks'),
     Input("graph", "relayoutData"),
     Input('channel', 'value'),
     Input('chp_find_0','n_clicks'),
     Input('chp_find_1','n_clicks'),
     Input('confirm-reset', 'submit_n_clicks'),
+    Input('rup-status-output', 'children'),
+    Input('tabs', 'value'),
     State('i','value'),
     State('path','value'),
     State('chp_mode_0', 'value'),
@@ -128,11 +148,11 @@ app = make_app(fig, fig_blob, fig2)
     State('chp_channel_1', 'value'),
     State('chp_target_1', 'value'),
     State('key_events', 'event'),
+    State('rup-channel', 'value')
     )
 
-
-def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, rupture, good, bad, coloc, select, scatter, smooth, strided, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, i, path, 
-               chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1, event):
+def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, rupture, good, bad, coloc, select, scatter, smooth, smooth_method, polyorder, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, rup_status, active_tab, i, path, 
+               chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1, event,rup_channel):
     changed_id = [p['prop_id'] for p in callback_context.triggered][0]
     global N_traces, fig, fig2, idx, total_frame, color, good_style, bad_style, bmode
     global new, time_b, N_traces, total_frame, tot_dtime
@@ -144,8 +164,8 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     if fig['layout']['uirevision'] == False:
         fig['layout']['uirevision'] = True   
     
-    strided_dict = ['moving', 'strided']
-    smooth_mode = strided_dict[int(strided)]
+    # Map smooth_method directly to smooth_mode
+    smooth_mode = smooth_method
 
     ##load path##
     if 'loadp' in changed_id:
@@ -162,10 +182,7 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     ##change trace##
     i, fig = change_trace(changed_id, event, i, N_traces, fig)
     
-    
-
     ##select good bad##
-
     select_list_g = select_good_bad(changed_id, event, i, select_list_g)
     colocalized_list = select_colocalized(changed_id, event, i, colocalized_list)
 
@@ -177,27 +194,40 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
         np.save(path+r'/selected_g.npy', select_list_g)
         np.save(path+r'/colocalized_list.npy', colocalized_list)
      
-    ##breakpoints##
-    bkps, mode, confirm_reset_show, channel_error_show = breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smooth, smooth_mode)
+    ##breakpoints## (Added polyorder)
+    bkps, mode, confirm_reset_show, channel_error_show = breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smooth, smooth_mode, polyorder)
     
     ##save / load breakpoints##
     bkps = sl_bkps(changed_id, path, bkps, mode)
 
+    # Auto-Detect Breakpoints (Added polyorder)
     bkps, channel_error_show = find_chp(changed_id, fret_g, fret_b, rr, gg, gr, bb, bg, br, i, time, select_list_g, 
              chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1,
-             bkps, smooth, smooth_mode)
+             bkps, smooth, smooth_mode, polyorder)
 
-    
-    # if 'rupture' in changed_id:
-        
-    #     rup=Rupture(fret[i])
-    #     tot_bkps[i]=rup.det_bkps()      
-    #     fig.layout.shapes=[]
-    #     fig = draw(fig,tot_bkps,i,time_gr,dead_time,color,total_frame)
-        
-    
-    ##update trace##
-    fig = update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, smooth, smooth_mode, show)
+    # ---------------------------------------------------------
+    # UI TRICK: HIDE RED DOTS ON RUPTURE TAB
+    # ---------------------------------------------------------
+    # Replace 'tab-rupture' with whatever the actual "value" of your Rupture tab is in layout.py
+    if active_tab == 'Rupture': 
+        # Create a "fake" dictionary so trace.py doesn't crash looking for 'g'
+        empty_traces = [[] for _ in range(max(1, N_traces))]
+        display_bkps = {
+            'r': empty_traces,
+            'g': empty_traces,
+            'b': empty_traces,
+            'fret_g': empty_traces,
+            'fret_b': empty_traces
+        }
+    else:
+        display_bkps = bkps  # Real dictionary -> Red dots draw normally!
+    # ---------------------------------------------------------
+
+    ##update trace## (Added polyorder)
+    fig = update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, display_bkps, smooth, smooth_mode, show, polyorder=polyorder,
+                       rup_bkps = rup_bkps, 
+                       channel = rup_channel,
+                       active_tab = active_tab)
 
     ##Display Information##
     if np.any(np.array(bkps['fret_g'], dtype = object)):
@@ -214,7 +244,6 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
         str_b_bkps = ''
     nnote='Total_traces: ' + str(N_traces)
 
-    
     return fig, i, str_g_bkps, str_b_bkps, mode, nnote, good_style, bad_style, colocalized_style, ch_label, ch_label, ch_label, confirm_reset_show, channel_error_show, relayout
 
 
@@ -261,15 +290,20 @@ def plot_and_save_fret_g(n_clicks, current_index, path):
     Input('i','value'),
     State('tabs', 'value'), 
     State('smooth', 'value'), 
-    State('strided', 'value'),
+    State('smooth_method', 'value'), # Changed from strided to smooth_method
+    State('polyorder', 'value'),
     blocking = True  
     )
-def show_blob_main(hoverData, aoi_max, i, tabs, smooth, strided):
+def show_blob_main(hoverData, aoi_max, i, tabs, smooth, smooth_method, polyorder): # <--- 2. Add it here
     global fig_blob, time
-    if tabs == 'Aois' :
-        fig_blob = show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, strided)
+    
+    if tabs == 'Aois':
+        # 3. Instead of just calculating a 'strided' boolean, pass the exact 
+        # smooth_method and polyorder straight into your show_blob function!
+        fig_blob = show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, smooth_method, polyorder)
     else:
         return fig_blob
+        
     return fig_blob
 
 
@@ -365,21 +399,307 @@ def update_Hist(fit, save, binsize, n_comps, cov_type, means, channels, path):
 
     return fig2, means
 
+
+@app.callback(
+    Output('rup-status-output', 'children'),
+    Input('btn-run-rupture', 'n_clicks'),
+    Input('btn-rup-fit-all', 'n_clicks'),
+    Input('btn-rup-clear', 'n_clicks'),      
+    Input('btn-rup-clear-all', 'n_clicks'),
+    Input('btn-rup-save', 'n_clicks'),   
+    Input('rup-direction', 'value'),
+    Input('rup-mingap', 'value'),
+    State('rup-channel', 'value'),
+    State('smooth_method', 'value'), 
+    State('smooth', 'value'),        
+    State('rup-penalty', 'value'),   
+    State('i', 'value'),
+    State('path', 'value')               
+)
+def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_clear_all, n_clicks_save, rup_direction, rup_mingap, rup_channel, smooth_method, smooth, penalty, i, path):
+    
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+        
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # ADDED 'bkps' TO THE GLOBAL LIST!
+    global fret_g, fret_b, rr, gg, gr, bb, bg, br, time, rup_bkps, N_traces, bkps
+    
+    if not rup_bkps:
+        rup_bkps = [[] for _ in range(max(1, N_traces))]
+    
+    # Safely initialize global bkps if it doesn't exist yet
+    if 'bkps' not in globals() or bkps is None:
+        bkps = {}
+        
+    try: i = int(i)
+    except: i = 0
+
+    # -------------------------------------------------------------
+    # CLEAR AND SAVE LOGIC
+    # -------------------------------------------------------------
+    if triggered_id == 'btn-rup-clear':
+        if i < len(rup_bkps):
+            rup_bkps[i] = [] 
+        return f"Cleared predictions for Trace {i}"
+        
+    elif triggered_id == 'btn-rup-clear-all':
+        rup_bkps = [[] for _ in range(max(1, N_traces))]
+        return "Cleared predictions for ALL traces"
+        
+    elif triggered_id == 'btn-rup-save':
+        if not path: return "Error: No folder path loaded."
+        file_path = os.path.join(path, 'breakpoints.npz')
+        
+        # 1. Secretly load existing breakpoints.npz so we don't delete the user's other work
+        if os.path.exists(file_path):
+            try:
+                loaded = np.load(file_path, allow_pickle=True)
+                for key in loaded.files:
+                    bkps[key] = loaded[key].tolist()
+            except Exception as e:
+                print(f"Failed to read existing npz: {e}")
+
+        # 2. Convert purple dots (times) into standard format (index, time)
+        time_mapping = time_mapping = {
+            'fret_g': 'fret_g', 'fret_b': 'fret_b', 
+            'gg': 'g', 'gr': 'g', 'rr': 'r', 
+            'bb': 'b', 'bg': 'b', 'br': 'b',
+            'r': 'r', 'g': 'g', 'b': 'b'
+        }
+        time_key = time_mapping.get(rup_channel, 'fret_g')
+        raw_time = time[time_key]
+
+        # Ensure the channel exists in the master dictionary first
+        if rup_channel not in bkps:
+            bkps[rup_channel] = [[] for _ in range(max(1, N_traces))]
+
+        # 3. SMART MERGE: Only overwrite the specific traces that have predictions!
+        for j in range(max(1, N_traces)):
+            if j < len(rup_bkps) and len(rup_bkps[j]) > 0:
+                trace_list = []
+                for t in rup_bkps[j]:
+                    idx = (np.abs(raw_time - t)).argmin()
+                    trace_list.append((idx, t))
+                # Overwrite ONLY this specific molecule in the master file
+                bkps[rup_channel][j] = trace_list
+        
+        # 4. Backup the old file just in case
+        if os.path.exists(file_path):
+            timestamp = rtime.strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(path, f'breakpoints_{timestamp}.npz')
+            shutil.copy(file_path, backup_path)
+            
+        # 5. Save the unified dictionary back to breakpoints.npz
+        save_dict = {k: np.array(v, dtype=object) for k, v in bkps.items()}
+        np.savez(file_path, **save_dict)
+        
+        # 6. MAGIC STEP: Empty the purple dots so the screen clears up!
+        rup_bkps = [[] for _ in range(max(1, N_traces))]
+        
+        return f"SUCCESS: Saved to Tools Tab! Purple dots cleared."
+    
+    
+    elif triggered_id == 'btn-rup-fit-all':
+        fitted_count = 0
+        skipped_count = 0
+        signal_dict = {
+        'fret_g': fret_g, 'fret_b': fret_b, 
+        'rr': rr, 'gg': gg, 'gr': gr, 'bb': bb, 'bg': bg, 'br': br,
+        'r': rr, 'g': gg, 'b': bb  }
+
+        # Map the dropdown channel to the correct key in your global `time` dictionary
+        time_mapping = {
+            'fret_g': 'fret_g', 'fret_b': 'fret_b',
+            'gg': 'g', 'gr': 'g', 'rr': 'r', 
+            'bb': 'b', 'bg': 'b', 'br': 'b',
+            'r': 'r', 'g': 'g', 'b': 'b'}
+        time_key = time_mapping.get(rup_channel, 'fret_g')
+        raw_time = time[time_key]
+
+        try: lag = int(smooth) 
+        except: lag = 1
+        try: min_gap = int(rup_mingap)
+        except: min_gap = 0
+        
+        for j in range(max(1, N_traces)):
+            # 1. SMART SKIP: Only skips if PURPLE dots exist. 
+            # Old .npz red dots are ignored here and WILL be overwritten upon saving!
+            if j < len(rup_bkps) and len(rup_bkps[j]) > 0:
+                skipped_count += 1
+                continue
+                
+            # 2. Extract Data safely
+            if rup_channel not in signal_dict: continue
+            raw_signal = signal_dict[rup_channel][j]
+            
+            if len(raw_signal) == 0: continue
+            
+            if len(raw_signal) != len(raw_time):
+                min_len = min(len(raw_signal), len(raw_time))
+                raw_signal = raw_signal[:min_len]
+                local_time = raw_time[:min_len]
+            else:
+                local_time = raw_time
+                
+            # 3. Apply smoothing
+            if smooth_method == 'moving': sm_signal, sm_time = uf(raw_signal, lag), local_time
+            elif smooth_method == 'median': sm_signal, sm_time = mf(raw_signal, lag), local_time
+            elif smooth_method == 'savgol': sm_signal, sm_time = sg(raw_signal, lag, polyorder=2), local_time
+            elif smooth_method == 'strided': sm_signal, sm_time = sa(raw_signal, lag), sa(local_time, lag)
+            else: sm_signal, sm_time = raw_signal, local_time
+
+            # 4. Run Math & Filters
+            try:
+                detector = Rupture(sm_signal)
+                detector.config['pen'] = penalty
+                found_indices = detector.det_bkps()
+                
+                # MIN-GAP Filter
+                gap_filtered = []
+                last_idx = -99999
+                for idx in sorted(found_indices):
+                    if (idx - last_idx) >= min_gap:
+                        gap_filtered.append(idx)
+                        last_idx = idx
+
+                # DIRECTION Filter
+                time_bkps = []
+                for idx in gap_filtered:
+                    start = max(0, int(idx) - 5)
+                    end = min(len(sm_signal), int(idx) + 5)
+                    
+                    before_slice = sm_signal[start:int(idx)]
+                    after_slice = sm_signal[int(idx):end]
+                    
+                    if len(before_slice) > 0 and len(after_slice) > 0:
+                        mean_before = np.mean(before_slice)
+                        mean_after = np.mean(after_slice)
+                        
+                        is_up = mean_after > mean_before
+                        is_down = mean_after < mean_before
+                        
+                        keep = False
+                        if rup_direction == 'both': keep = True
+                        elif rup_direction == 'up' and is_up: keep = True
+                        elif rup_direction == 'down' and is_down: keep = True
+                        
+                        if keep:
+                            safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
+                            time_bkps.append(sm_time[safe_idx])
+                
+                rup_bkps[j] = time_bkps
+                fitted_count += 1
+            except:
+                continue
+                
+        return f"Fit All Complete! Predicted {fitted_count} new traces. Kept {skipped_count} current manual predictions."
+
+
+    # The whole Load logic block is completely gone!
+    # -------------------------------------------------------------
+
+    if triggered_id == '':
+        raise PreventUpdate
+
+    # ... (Keep all your standard signal math and filtering logic below here exactly as it is!) ...
+    signal_dict = {'fret_g': fret_g, 'fret_b': fret_b, 'rr': rr, 'gg': gg, 'gr': gr, 'bb': bb, 'bg': bg, 'br': br, 'r': rr, 'g': gg, 'b': bb}
+
+    # Map the dropdown channel to the correct key in your global `time` dictionary
+    time_mapping = {'fret_g': 'fret_g', 'fret_b': 'fret_b', 'gg': 'g', 'gr': 'g', 'rr': 'r', 'bb': 'b', 'bg': 'b', 'br': 'b', 'r': 'r', 'g': 'g', 'b': 'b'}
+    
+    if rup_channel not in signal_dict:
+        return f"Error: Channel '{rup_channel}' not supported."
+        
+    raw_signal = signal_dict[rup_channel][i]
+    
+    # Safely get the correct time array directly from the global dictionary
+    time_key = time_mapping.get(rup_channel, 'fret_g')
+    raw_time = time[time_key]
+    
+    # --- SMART SAFETY CHECKS ---
+    if len(raw_signal) == 0:
+        return f"Error: The actual signal for '{rup_channel}' is empty."
+    if len(raw_time) == 0:
+        return f"Error: The time array for '{rup_channel}' is empty."
+        
+    # Force them to match the shortest one to prevent plotting crashes
+    if len(raw_signal) != len(raw_time):
+        min_len = min(len(raw_signal), len(raw_time))
+        raw_signal = raw_signal[:min_len]
+        raw_time = raw_time[:min_len]
+
+    try: lag = int(smooth) 
+    except: lag = 1
+
+    # Apply global smoothing to local channel
+    if smooth_method == 'moving': sm_signal, sm_time = uf(raw_signal, lag), raw_time
+    elif smooth_method == 'median': sm_signal, sm_time = mf(raw_signal, lag), raw_time
+    elif smooth_method == 'savgol': sm_signal, sm_time = sg(raw_signal, lag, polyorder=2), raw_time
+    elif smooth_method == 'strided': sm_signal, sm_time = sa(raw_signal, lag), sa(raw_time, lag)
+    else: sm_signal, sm_time = raw_signal, raw_time
+        
+    if len(sm_time) == 0 or len(sm_signal) == 0:
+        return f"Error: Smoothing compressed the array to 0 points! Lower your lag."
+        
+    try:
+        # 1. Run ruptures
+        detector = Rupture(sm_signal)
+        detector.config['pen'] = penalty
+        found_indices = detector.det_bkps()
+
+        # 2. Safety check the min-gap input
+        try: min_gap = int(rup_mingap)
+        except: min_gap = 0
+            
+        # 3. Apply MIN-GAP Filter
+        gap_filtered = []
+        last_idx = -99999
+        for idx in sorted(found_indices):
+            if (idx - last_idx) >= min_gap:
+                gap_filtered.append(idx)
+                last_idx = idx
+
+        # 4. Apply DIRECTION Filter
+        time_bkps = []
+        for idx in gap_filtered:
+            # Look at 5 frames before and 5 frames after to determine direction
+            start = max(0, int(idx) - 5)
+            end = min(len(sm_signal), int(idx) + 5)
+            
+            before_slice = sm_signal[start:int(idx)]
+            after_slice = sm_signal[int(idx):end]
+            
+            # Make sure we aren't at the absolute edge of the data
+            if len(before_slice) > 0 and len(after_slice) > 0:
+                mean_before = np.mean(before_slice)
+                mean_after = np.mean(after_slice)
+                
+                is_up = mean_after > mean_before
+                is_down = mean_after < mean_before
+                
+                # Check if it matches the user's choice
+                keep = False
+                if rup_direction == 'both': keep = True
+                elif rup_direction == 'up' and is_up: keep = True
+                elif rup_direction == 'down' and is_down: keep = True
+                
+                if keep:
+                    safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
+                    time_bkps.append(sm_time[safe_idx])
+            
+        # 5. Save and return
+        rup_bkps[i] = time_bkps
+        return f"Success: {len(time_bkps)} points on {rup_channel}"
     
         
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc()) # Prints exact error to console if something fails
+        return f"Error: {str(e)}"
+      
 server = app.server 
 if __name__ == '__main__':
-   app.run_server(debug = False)
-
-
-
-
-
-
-
-
-
-
-
-
-
+   app.run_server(debug = True)

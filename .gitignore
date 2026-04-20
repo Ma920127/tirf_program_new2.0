@@ -1,0 +1,13 @@
+# Python Virtual Environments
+.venv/
+venv/
+env/
+
+# Python Cache Files
+**/__pycache__/
+*.py[cod]
+*$py.class
+**/cache_dir/
+
+# Ignore log files (like the app.log in your screenshot)
+*.log

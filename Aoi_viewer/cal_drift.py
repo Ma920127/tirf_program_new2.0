@@ -11,8 +11,6 @@ import logging
 # import imageio.v2 as imageio  # use the recommended import to avoid warnings
 from tqdm import tqdm
 
-
-
 def gaussian(x, amp, mu, sigma):
     return amp * np.exp(-(x - mu)**2 / (2 * sigma**2))
 
@@ -157,24 +155,6 @@ def apply_drift_correction(target_channel, path, time_reference, time_target, dr
     return warped_stack
 
 
-# def save_movie_imageio(image_stack, filename):
-#     with imageio.get_writer(filename, fps=fps, macro_block_size=1) as writer:
-#         for frame in tqdm(range(image_stack.shape[0]), desc=f"Creating {filename}"):
-#             fig, ax = plt.subplots(figsize=(5, 5))
-#             ax.imshow(image_stack[frame], cmap='gray',
-#                       vmin=np.percentile(image_stack[frame], 0),
-#                       vmax=np.percentile(image_stack[frame], 99))
-#             ax.axis('off')
-#             plt.tight_layout()
-
-#             plt.savefig('temp_frame.png', bbox_inches='tight', pad_inches=0)
-#             plt.close(fig)
-
-#             image = imageio.imread('temp_frame.png')
-#             writer.append_data(image)
-
-
-
 def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, channel, per_n = 200, pairing_threshold = 1.5, ratio_thres = 1.5):
     time_dict = {
     'green': gs.image_datas[0],
@@ -243,86 +223,3 @@ def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, cha
         gs.loader.image_r = warped_red
         np.save(os.path.join(drifts_dir, f'warped_r.npy'), warped_red)
 
-
-
-
-
-
-
-
-
-
-
-
-
-# path = r'J:\TIRF\20250421\lane1\F3101\20s'
-# fsc = FileSystemCache("cache_dir")
-
-# mpath = r'D:\TIRF_Program\Bkp_picker\mapping\20250423'
-# maxf = 1500
-# minf = 500
-# channel = 'green'
-# average_frame = 10
-# per_n = 200
-# pairing_threshold = 1.5  
-
-
-# loader, image_g, image_r, image_b, image_datas = load_path(7, path, fsc)
-# time_dict = {
-#     'green': image_datas[0],
-#     'red': image_datas[1],
-#     'blue': image_datas[2],
-# }
-
-
-
-# drift_history = track_and_plot_drift(
-#     loader = loader,
-#     image_stack = image_g,
-#     fsc = fsc,
-#     mpath = mpath,
-#     maxf = maxf,
-#     minf = minf,
-#     average_frame = average_frame,
-#     per_n = per_n,
-#     pairing_threshold = pairing_threshold,
-#     channel = channel
-# )
-
-# time_reference = time_dict[channel]
-
-# warped_green = apply_drift_correction(
-#     target_channel='green',
-#     time_reference = time_reference,
-#     time_target = time_dict['green'],
-#     drift_history = drift_history,
-#     image_stack = image_g,
-# )
-
-# warped_blue= apply_drift_correction(
-#     target_channel='blue',
-#     time_reference = time_reference,
-#     time_target =  time_dict['blue'],
-#     drift_history = drift_history,
-#     image_stack = image_b,
-# )
-
-
-# # # Video parameters
-# # fps = 10
-# # original_video_filename = 'original_stack_green.mp4'
-# # warped_video_filename = 'warped_stack_green.mp4'
-# # # Save original stack
-# # save_movie_imageio(image_g, original_video_filename)
-# # # Save warped stack
-# # save_movie_imageio(warped_green, warped_video_filename)
-
-
-# # original_video_filename = 'original_stack_blue.mp4'
-# # warped_video_filename = 'warped_stack_blue.mp4'
-# # #
-# # save_movie_imageio(image_b, original_video_filename)
-# # # Save warped stack
-# # save_movie_imageio(warped_blue, warped_video_filename)
-
-# # print("✅ Both movies saved successfully.")

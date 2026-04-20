@@ -7,6 +7,7 @@ from layout_tabs.tools import tools_tab
 from layout_tabs.aois import aois_tab
 from layout_tabs.hmm import hmm_tab
 from layout_tabs.gmm import gmm_tab
+from layout_tabs.rupture import rupture_tab
 
 def make_app(fig, fig_blob, fig2):
     app = DashProxy(
@@ -32,12 +33,13 @@ def make_app(fig, fig_blob, fig2):
                     tools_tab(),
                     aois_tab(fig_blob),
                     hmm_tab(),
-                    gmm_tab(fig2)
+                    gmm_tab(fig2),
+                    rupture_tab()
                 ],
                 # "style" affects the tab label area.
                 style={'width': "5%", "height": '600px'},
                 # "content_style" affects the content area.
-                content_style={'width': "95%", "height": '100%'},
+                content_style={'width': "95%", "height": '100%'}
             ),
             # Apply parent styles by wrapping the Tabs in a Div.
             style={'width': "100%", "height": "100%"}
