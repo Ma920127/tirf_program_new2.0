@@ -8,7 +8,6 @@ rup_config={'model': 'l1',
     }
 
 
-
 class Rupture:
     def __init__(self,fret):
         
