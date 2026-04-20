@@ -412,11 +412,14 @@ def update_Hist(fit, save, binsize, n_comps, cov_type, means, channels, path):
     State('rup-channel', 'value'),
     State('smooth_method', 'value'), 
     State('smooth', 'value'),        
-    State('rup-penalty', 'value'),   
+    State('rup-penalty', 'value'),
+    State('rup-censor-mode', 'value'),
+    State('rup-upper-thresh', 'value'),  
+    State('rup-lower-thresh', 'value'), 
     State('i', 'value'),
     State('path', 'value')               
 )
-def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_clear_all, n_clicks_save, rup_direction, rup_mingap, rup_channel, smooth_method, smooth, penalty, i, path):
+def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_clear_all, n_clicks_save, rup_direction, rup_mingap, rup_channel, smooth_method, smooth, penalty, censor_mode, upper_thresh, lower_thresh, i, path):
     
     ctx = callback_context
     if not ctx.triggered:
@@ -589,7 +592,25 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
                         if keep:
                             safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
                             time_bkps.append(sm_time[safe_idx])
-                
+                # ---------------------------------------------------
+                # NEW: CENSOR LOGIC (FIT ALL)
+                # ---------------------------------------------------
+                if len(time_bkps) == 0 and censor_mode and censor_mode != 'none':
+                    mean_intensity = np.mean(sm_signal)
+                    
+                    try: u_val = float(upper_thresh)
+                    except: u_val = float('inf')
+                    
+                    try: l_val = float(lower_thresh)
+                    except: l_val = -float('inf')
+                    
+                    # Check Right Censor (Upper Threshold)
+                    if censor_mode in ['right', 'both'] and mean_intensity >= u_val:
+                        time_bkps.append(sm_time[-1]) 
+                    # Check Left Censor (Lower Threshold)
+                    elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
+                        time_bkps.append(sm_time[0])  
+                # ---------------------------------------------------
                 rup_bkps[j] = time_bkps
                 fitted_count += 1
             except:
@@ -689,7 +710,24 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
                 if keep:
                     safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
                     time_bkps.append(sm_time[safe_idx])
+        # ---------------------------------------------------
+        # NEW: CENSOR LOGIC (SINGLE TRACE)
+        # ---------------------------------------------------
+        if len(time_bkps) == 0 and censor_mode and censor_mode != 'none':
+            mean_intensity = np.mean(sm_signal)
             
+            try: u_val = float(upper_thresh)
+            except: u_val = float('inf')
+            
+            try: l_val = float(lower_thresh)
+            except: l_val = -float('inf')
+            
+            if censor_mode in ['right', 'both'] and mean_intensity >= u_val:
+                time_bkps.append(sm_time[-1])
+            elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
+                time_bkps.append(sm_time[0]) 
+        # ---------------------------------------------------
+        
         # 5. Save and return
         rup_bkps[i] = time_bkps
         return f"Success: {len(time_bkps)} points on {rup_channel}"
