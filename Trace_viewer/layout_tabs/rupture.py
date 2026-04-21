@@ -27,20 +27,48 @@ def rupture_tab():
                                 value='fret_g',
                                 clearable=False
                             )
-                        ], width=5), 
+                        ], width=2), 
                         
                         dbc.Col([
                             dbc.Label("Penalty (λ)"),
                             dcc.Input(
                                 id='rup-penalty', 
                                 type='number', 
-                                value=50000, 
+                                value=35000, 
                                 className="form-control" 
                             )
-                        ], width=5),
+                        ], width=2),
+
+                        dbc.Col([
+                            dbc.Label("Min Gap (frames)"),
+                            dcc.Input(
+                                id='rup-mingap', 
+                                type='number', 
+                                value=0, 
+                                min=0, 
+                                step=1,
+                                className="form-control"
+                            )
+                        ], width=2),
+
+                        dbc.Col([
+                            dbc.Label("Vacuum overwrite"),
+                            dbc.Switch(
+                                id="switch-vacuum-overwrite",
+                                value=False,
+                                style={"marginTop": "4px"}
+                            ),
+                            html.Small(
+                                id="vacuum-overwrite-hint",
+                                children="Off: keep old bkps",
+                                className="text-muted",
+                                style={"fontSize": "15px", "marginTop": "2px"}
+                            )
+                        ], width=2),
+
                     ], className="mb-3"), 
 
-                    # ROW 2: Direction and Min Gap
+                    # ROW 2: Direction Filter
                     dbc.Row([
                         dbc.Col([
                             dbc.Label("Direction Filter", className="d-block"), 
@@ -55,22 +83,10 @@ def rupture_tab():
                                 inline=True,
                                 inputStyle={"margin-right": "5px", "margin-left": "10px"}
                             )
-                        ], width=7),
-                        
-                        dbc.Col([
-                            dbc.Label("Min Gap (frames)"),
-                            dcc.Input(
-                                id='rup-mingap', 
-                                type='number', 
-                                value=0, 
-                                min=0, 
-                                step=1,
-                                className="form-control"
-                            )
-                        ], width=4), 
+                        ], width=7)
                     ], className="mb-4"),
 
-                    html.Hr(className="my-4"), # Subtle horizontal line before buttons
+                    html.Hr(className="my-4"),
 
                     # ROW 3: Action Buttons (Detect / Fit All)
                     dbc.Row([
@@ -93,7 +109,7 @@ def rupture_tab():
                         ], width=4),
                     ], className="mb-2"),
 
-                    # ROW 4: Bottom Buttons (Clear)
+                    # ROW 4: Clear Buttons
                     dbc.Row([
                         dbc.Col([
                             html.Button(
@@ -126,7 +142,7 @@ def rupture_tab():
                         ], width=8), 
                     ], className="mb-3"),
 
-                    # Status Output Text
+                    # Status Output
                     dbc.Row([
                         dbc.Col([
                             html.Div(id='rup-status-output', className="mt-2 text-danger font-weight-bold")
@@ -184,7 +200,6 @@ def rupture_tab():
                         ], width=12)
                     ], className="mb-3"),
 
-                    # Helpful text box to explain the feature
                     html.Div([
                         html.Small(
                             "If Rupture detection yields no breakpoints, the algorithm checks the overall trace mean against these thresholds. If triggered, it sets a fallback breakpoint at the start (Left) or end (Right) of the trace.",
