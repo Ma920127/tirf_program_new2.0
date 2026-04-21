@@ -427,13 +427,11 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    # ADDED 'bkps' TO THE GLOBAL LIST!
     global fret_g, fret_b, rr, gg, gr, bb, bg, br, time, rup_bkps, N_traces, bkps
     
     if not rup_bkps:
         rup_bkps = [[] for _ in range(max(1, N_traces))]
     
-    # Safely initialize global bkps if it doesn't exist yet
     if 'bkps' not in globals() or bkps is None:
         bkps = {}
         
@@ -456,7 +454,6 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         if not path: return "Error: No folder path loaded."
         file_path = os.path.join(path, 'breakpoints.npz')
         
-        # 1. Secretly load existing breakpoints.npz so we don't delete the user's other work
         if os.path.exists(file_path):
             try:
                 loaded = np.load(file_path, allow_pickle=True)
@@ -465,8 +462,7 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
             except Exception as e:
                 print(f"Failed to read existing npz: {e}")
 
-        # 2. Convert purple dots (times) into standard format (index, time)
-        time_mapping = time_mapping = {
+        time_mapping = {
             'fret_g': 'fret_g', 'fret_b': 'fret_b', 
             'gg': 'g', 'gr': 'g', 'rr': 'r', 
             'bb': 'b', 'bg': 'b', 'br': 'b',
@@ -475,36 +471,31 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         time_key = time_mapping.get(rup_channel, 'fret_g')
         raw_time = time[time_key]
 
-        # Ensure the channel exists in the master dictionary first
         if rup_channel not in bkps:
             bkps[rup_channel] = [[] for _ in range(max(1, N_traces))]
 
-        # 3. SMART MERGE: Only overwrite the specific traces that have predictions!
         for j in range(max(1, N_traces)):
             if j < len(rup_bkps) and len(rup_bkps[j]) > 0:
                 trace_list = []
                 for t in rup_bkps[j]:
                     idx = (np.abs(raw_time - t)).argmin()
                     trace_list.append((idx, t))
-                # Overwrite ONLY this specific molecule in the master file
                 bkps[rup_channel][j] = trace_list
         
-        # 4. Backup the old file just in case
         if os.path.exists(file_path):
             timestamp = rtime.strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(path, f'breakpoints_{timestamp}.npz')
             shutil.copy(file_path, backup_path)
             
-        # 5. Save the unified dictionary back to breakpoints.npz
         save_dict = {k: np.array(v, dtype=object) for k, v in bkps.items()}
         np.savez(file_path, **save_dict)
         
-        # 6. MAGIC STEP: Empty the purple dots so the screen clears up!
         rup_bkps = [[] for _ in range(max(1, N_traces))]
-        
         return f"SUCCESS: Saved to Tools Tab! Purple dots cleared."
     
-    
+    # -------------------------------------------------------------
+    # FIT ALL TRACES
+    # -------------------------------------------------------------
     elif triggered_id == 'btn-rup-fit-all':
         fitted_count = 0
         skipped_count = 0
@@ -513,12 +504,7 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         'rr': rr, 'gg': gg, 'gr': gr, 'bb': bb, 'bg': bg, 'br': br,
         'r': rr, 'g': gg, 'b': bb  }
 
-        # Map the dropdown channel to the correct key in your global `time` dictionary
-        time_mapping = {
-            'fret_g': 'fret_g', 'fret_b': 'fret_b',
-            'gg': 'g', 'gr': 'g', 'rr': 'r', 
-            'bb': 'b', 'bg': 'b', 'br': 'b',
-            'r': 'r', 'g': 'g', 'b': 'b'}
+        time_mapping = {'fret_g': 'fret_g', 'fret_b': 'fret_b', 'gg': 'g', 'gr': 'g', 'rr': 'r', 'bb': 'b', 'bg': 'b', 'br': 'b', 'r': 'r', 'g': 'g', 'b': 'b'}
         time_key = time_mapping.get(rup_channel, 'fret_g')
         raw_time = time[time_key]
 
@@ -527,16 +513,24 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         try: min_gap = int(rup_mingap)
         except: min_gap = 0
         
+
         for j in range(max(1, N_traces)):
-            # 1. SMART SKIP: Only skips if PURPLE dots exist. 
-            # Old .npz red dots are ignored here and WILL be overwritten upon saving!
-            if j < len(rup_bkps) and len(rup_bkps[j]) > 0:
+            # FIX 2: Ensure rup_bkps is large enough for index 'j'
+            while len(rup_bkps) <= j:
+                rup_bkps.append([])
+                
+            if len(rup_bkps[j]) > 0:
                 skipped_count += 1
                 continue
                 
-            # 2. Extract Data safely
             if rup_channel not in signal_dict: continue
-            raw_signal = signal_dict[rup_channel][j]
+            
+            # FIX 1: Ensure we don't try to grab a trace that doesn't exist
+            channel_data = signal_dict[rup_channel]
+            if channel_data is None or j >= len(channel_data):
+                continue # Safely skip if index is out of bounds for this channel
+                
+            raw_signal = channel_data[j]
             
             if len(raw_signal) == 0: continue
             
@@ -547,70 +541,22 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
             else:
                 local_time = raw_time
                 
-            # 3. Apply smoothing
+            # Apply smoothing
             if smooth_method == 'moving': sm_signal, sm_time = uf(raw_signal, lag), local_time
             elif smooth_method == 'median': sm_signal, sm_time = mf(raw_signal, lag), local_time
             elif smooth_method == 'savgol': sm_signal, sm_time = sg(raw_signal, lag, polyorder=2), local_time
             elif smooth_method == 'strided': sm_signal, sm_time = sa(raw_signal, lag), sa(local_time, lag)
             else: sm_signal, sm_time = raw_signal, local_time
 
-            # 4. Run Math & Filters
             try:
+                # ALL OF THE MATH HAPPENS IN THIS ONE FUNCTION CALL NOW!
                 detector = Rupture(sm_signal)
                 detector.config['pen'] = penalty
-                found_indices = detector.det_bkps()
+                time_bkps = detector.analyze_trace(
+                    sm_time=sm_time, min_gap=min_gap, direction=rup_direction, 
+                    censor_mode=censor_mode, upper_thresh=upper_thresh, lower_thresh=lower_thresh
+                )
                 
-                # MIN-GAP Filter
-                gap_filtered = []
-                last_idx = -99999
-                for idx in sorted(found_indices):
-                    if (idx - last_idx) >= min_gap:
-                        gap_filtered.append(idx)
-                        last_idx = idx
-
-                # DIRECTION Filter
-                time_bkps = []
-                for idx in gap_filtered:
-                    start = max(0, int(idx) - 5)
-                    end = min(len(sm_signal), int(idx) + 5)
-                    
-                    before_slice = sm_signal[start:int(idx)]
-                    after_slice = sm_signal[int(idx):end]
-                    
-                    if len(before_slice) > 0 and len(after_slice) > 0:
-                        mean_before = np.mean(before_slice)
-                        mean_after = np.mean(after_slice)
-                        
-                        is_up = mean_after > mean_before
-                        is_down = mean_after < mean_before
-                        
-                        keep = False
-                        if rup_direction == 'both': keep = True
-                        elif rup_direction == 'up' and is_up: keep = True
-                        elif rup_direction == 'down' and is_down: keep = True
-                        
-                        if keep:
-                            safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
-                            time_bkps.append(sm_time[safe_idx])
-                # ---------------------------------------------------
-                # NEW: CENSOR LOGIC (FIT ALL)
-                # ---------------------------------------------------
-                if len(time_bkps) == 0 and censor_mode and censor_mode != 'none':
-                    mean_intensity = np.mean(sm_signal)
-                    
-                    try: u_val = float(upper_thresh)
-                    except: u_val = float('inf')
-                    
-                    try: l_val = float(lower_thresh)
-                    except: l_val = -float('inf')
-                    
-                    # Check Right Censor (Upper Threshold)
-                    if censor_mode in ['right', 'both'] and mean_intensity >= u_val:
-                        time_bkps.append(sm_time[-1]) 
-                    # Check Left Censor (Lower Threshold)
-                    elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
-                        time_bkps.append(sm_time[0])  
-                # ---------------------------------------------------
                 rup_bkps[j] = time_bkps
                 fitted_count += 1
             except:
@@ -618,35 +564,33 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
                 
         return f"Fit All Complete! Predicted {fitted_count} new traces. Kept {skipped_count} current manual predictions."
 
-
-    # The whole Load logic block is completely gone!
-    # -------------------------------------------------------------
-
     if triggered_id == '':
         raise PreventUpdate
 
-    # ... (Keep all your standard signal math and filtering logic below here exactly as it is!) ...
+    # -------------------------------------------------------------
+    # DETECT CURRENT TRACE
+    # -------------------------------------------------------------
     signal_dict = {'fret_g': fret_g, 'fret_b': fret_b, 'rr': rr, 'gg': gg, 'gr': gr, 'bb': bb, 'bg': bg, 'br': br, 'r': rr, 'g': gg, 'b': bb}
-
-    # Map the dropdown channel to the correct key in your global `time` dictionary
     time_mapping = {'fret_g': 'fret_g', 'fret_b': 'fret_b', 'gg': 'g', 'gr': 'g', 'rr': 'r', 'bb': 'b', 'bg': 'b', 'br': 'b', 'r': 'r', 'g': 'g', 'b': 'b'}
     
     if rup_channel not in signal_dict:
         return f"Error: Channel '{rup_channel}' not supported."
         
-    raw_signal = signal_dict[rup_channel][i]
+    channel_data = signal_dict[rup_channel]
     
-    # Safely get the correct time array directly from the global dictionary
+    # FIX 1: Prevent "IndexError: index 0 is out of bounds for axis 0 with size 0"
+    if channel_data is None or len(channel_data) == 0:
+        return f"Error: No data loaded for channel '{rup_channel}'."
+    if i >= len(channel_data):
+        return f"Error: Trace index {i} out of bounds (Max is {len(channel_data)-1})."
+        
+    raw_signal = channel_data[i]
     time_key = time_mapping.get(rup_channel, 'fret_g')
     raw_time = time[time_key]
     
-    # --- SMART SAFETY CHECKS ---
-    if len(raw_signal) == 0:
-        return f"Error: The actual signal for '{rup_channel}' is empty."
-    if len(raw_time) == 0:
-        return f"Error: The time array for '{rup_channel}' is empty."
+    if len(raw_signal) == 0: return f"Error: The actual signal for '{rup_channel}' is empty."
+    if len(raw_time) == 0: return f"Error: The time array for '{rup_channel}' is empty."
         
-    # Force them to match the shortest one to prevent plotting crashes
     if len(raw_signal) != len(raw_time):
         min_len = min(len(raw_signal), len(raw_time))
         raw_signal = raw_signal[:min_len]
@@ -654,8 +598,9 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
 
     try: lag = int(smooth) 
     except: lag = 1
+    try: min_gap = int(rup_mingap)
+    except: min_gap = 0
 
-    # Apply global smoothing to local channel
     if smooth_method == 'moving': sm_signal, sm_time = uf(raw_signal, lag), raw_time
     elif smooth_method == 'median': sm_signal, sm_time = mf(raw_signal, lag), raw_time
     elif smooth_method == 'savgol': sm_signal, sm_time = sg(raw_signal, lag, polyorder=2), raw_time
@@ -666,78 +611,26 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
         return f"Error: Smoothing compressed the array to 0 points! Lower your lag."
         
     try:
-        # 1. Run ruptures
         detector = Rupture(sm_signal)
         detector.config['pen'] = penalty
-        found_indices = detector.det_bkps()
-
-        # 2. Safety check the min-gap input
-        try: min_gap = int(rup_mingap)
-        except: min_gap = 0
-            
-        # 3. Apply MIN-GAP Filter
-        gap_filtered = []
-        last_idx = -99999
-        for idx in sorted(found_indices):
-            if (idx - last_idx) >= min_gap:
-                gap_filtered.append(idx)
-                last_idx = idx
-
-        # 4. Apply DIRECTION Filter
-        time_bkps = []
-        for idx in gap_filtered:
-            # Look at 5 frames before and 5 frames after to determine direction
-            start = max(0, int(idx) - 5)
-            end = min(len(sm_signal), int(idx) + 5)
-            
-            before_slice = sm_signal[start:int(idx)]
-            after_slice = sm_signal[int(idx):end]
-            
-            # Make sure we aren't at the absolute edge of the data
-            if len(before_slice) > 0 and len(after_slice) > 0:
-                mean_before = np.mean(before_slice)
-                mean_after = np.mean(after_slice)
-                
-                is_up = mean_after > mean_before
-                is_down = mean_after < mean_before
-                
-                # Check if it matches the user's choice
-                keep = False
-                if rup_direction == 'both': keep = True
-                elif rup_direction == 'up' and is_up: keep = True
-                elif rup_direction == 'down' and is_down: keep = True
-                
-                if keep:
-                    safe_idx = min(max(0, int(idx)), len(sm_time) - 1)
-                    time_bkps.append(sm_time[safe_idx])
-        # ---------------------------------------------------
-        # NEW: CENSOR LOGIC (SINGLE TRACE)
-        # ---------------------------------------------------
-        if len(time_bkps) == 0 and censor_mode and censor_mode != 'none':
-            mean_intensity = np.mean(sm_signal)
-            
-            try: u_val = float(upper_thresh)
-            except: u_val = float('inf')
-            
-            try: l_val = float(lower_thresh)
-            except: l_val = -float('inf')
-            
-            if censor_mode in ['right', 'both'] and mean_intensity >= u_val:
-                time_bkps.append(sm_time[-1])
-            elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
-                time_bkps.append(sm_time[0]) 
-        # ---------------------------------------------------
+        time_bkps = detector.analyze_trace(
+            sm_time=sm_time, min_gap=min_gap, direction=rup_direction, 
+            censor_mode=censor_mode, upper_thresh=upper_thresh, lower_thresh=lower_thresh
+        )
         
-        # 5. Save and return
+        # FIX 2: Prevent "IndexError: list assignment index out of range"
+        # If 'i' is larger than our rup_bkps list, expand the list dynamically
+        while len(rup_bkps) <= i:
+            rup_bkps.append([])
+            
         rup_bkps[i] = time_bkps
         return f"Success: {len(time_bkps)} points on {rup_channel}"
-    
         
     except Exception as e:
         import traceback
-        print(traceback.format_exc()) # Prints exact error to console if something fails
+        print(traceback.format_exc()) 
         return f"Error: {str(e)}"
-      
+
 server = app.server 
 if __name__ == '__main__':
    app.run_server(debug = True)
