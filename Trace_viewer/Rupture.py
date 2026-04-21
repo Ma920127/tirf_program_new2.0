@@ -30,8 +30,6 @@ class Rupture:
             true_b = b - pad_width
             if 0 < true_b < len(self.trace):
                 bkps.append(true_b)
-        print(bkps)
-                
         return bkps
 
     def analyze_trace(self, sm_time, min_gap=0, direction='both', censor_mode='none', upper_thresh=0.8, lower_thresh=0.2):
@@ -85,5 +83,6 @@ class Rupture:
                 time_bkps.append(sm_time[-1])
             elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
                 time_bkps.append(sm_time[0]) 
+            print(time_bkps)
                 
         return time_bkps
