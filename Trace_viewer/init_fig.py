@@ -298,8 +298,8 @@ def init_fig():
         
         yaxis1=dict(**mpl_axis_style, domain=[0.01, 0.23], anchor='x1', title=dict(text='FRET', font=dict(size=14)), dtick=0.2, range=[0, 1],minallowed=-0.2, maxallowed=1.2),
         yaxis2=dict(**mpl_axis_style, domain=[0.26, 0.48], anchor='x3', title=dict(text='FRET', font=dict(size=14)), dtick=0.2, range=[0, 1],minallowed=-0.2, maxallowed=1.2),
-        yaxis3=dict(**mpl_axis_style, domain=[0.51, 0.73], anchor='x4', title=dict(text='Intensity', font=dict(size=14)), rangemode='tozero', minallowed = 0),  #range=(0, None),
-        yaxis4=dict(**mpl_axis_style, domain=[0.76, 0.98], anchor='x5', title=dict(text='Intensity', font=dict(size=14)), rangemode='tozero', minallowed = 0),   #range=(0, None),
+        yaxis3=dict(**mpl_axis_style, domain=[0.51, 0.73], anchor='x4', title=dict(text='Intensity', font=dict(size=14)), rangemode='tozero'),  #range=(0, None),
+        yaxis4=dict(**mpl_axis_style, domain=[0.76, 0.98], anchor='x5', title=dict(text='Intensity', font=dict(size=14)), rangemode='tozero'),   #range=(0, None),
         
         autosize=True,
     )
