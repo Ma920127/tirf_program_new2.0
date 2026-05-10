@@ -286,10 +286,11 @@ def show_blob_main(hoverData, aoi_max, i, tabs, smooth, strided):
     State('hmm_means', 'data'),
     State('hmm_epoch', 'value'),
     State('hmm_niter', 'value'),
+    State('hmm_channel', 'value'),
     State('path','value'),
-    blocking = True  
+    blocking = True
     )
-def HMM(start, w, fit, fix, plot, cov_type, means, epoch, n_iter, path):
+def HMM(start, w, fit, fix, plot, cov_type, means, epoch, n_iter, channel, path):
     changed_id = [p['prop_id'] for p in callback_context.triggered][0]
     if 'hmm_start' in changed_id:
         init_means = []
@@ -298,15 +299,15 @@ def HMM(start, w, fit, fix, plot, cov_type, means, epoch, n_iter, path):
                 float(means[0][str(i)])
             except:
                 continue
-            if 0 <= float(means[0][str(i)]) <=1:
+            if 0 <= float(means[0][str(i)]) <= 1:
                 init_means.append(float(means[0][str(i)]))
         init_means = np.array(init_means).reshape(-1, 1)
         print(init_means)
         if np.any(init_means):
             hfit = HMM_fitter(path)
-            hfit.load_traces()
-            hfit.fitHMM(fit, w, init_means, fix_means = fix, epoch = epoch, covariance_type = cov_type, n_iter = n_iter)
-            hfit.cal_states(plot = plot)    
+            hfit.load_traces(channel=channel)
+            hfit.fitHMM(fit, w, init_means, fix_means=fix, epoch=epoch, covariance_type=cov_type, n_iter=n_iter)
+            hfit.cal_states(plot=plot)
         return np.random.rand(1)
     else:
         raise PreventUpdate() 

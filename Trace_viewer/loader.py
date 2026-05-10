@@ -62,9 +62,12 @@ class Loader :
             blobs = None
         
         try:
-            hmm_fret_g = np.load(self.path + r'\HMM_traces\hmm.npz', allow_pickle=True)['hd_states']
+            hmm_fret_g = np.load(self.path + r'\HMM_traces\hmm_fret_g.npz', allow_pickle=True)['hd_states']
         except:
-            hmm_fret_g = np.zeros_like(fret_g)
+            try:
+                hmm_fret_g = np.load(self.path + r'\HMM_traces\hmm.npz', allow_pickle=True)['hd_states']
+            except:
+                hmm_fret_g = np.zeros_like(fret_g)
 
 
         ch_label = []
