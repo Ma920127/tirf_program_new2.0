@@ -6,7 +6,7 @@ REM Change the current directory to the directory where this script is located.
 cd /d %~dp0
 
 REM Activate the virtual environment from the main project root.
-call ..\..\..\..\.venv\Scripts\activate.bat
+call ..\.venv\Scripts\activate.bat
 
 REM Change to the Trace_viewer directory.
 cd /d %~dp0
