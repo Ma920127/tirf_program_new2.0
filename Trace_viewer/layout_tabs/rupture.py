@@ -142,6 +142,30 @@ def rupture_tab():
                         ], width=8), 
                     ], className="mb-3"),
 
+                    # Fit-All progress bar — shown by clientside callback while server is busy
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id='rup-fit-progress-container',
+                                children=[
+                                    html.Small(
+                                        'Fitting all traces — please wait…',
+                                        className='text-muted d-block mb-1',
+                                        style={'fontSize': '12px'},
+                                    ),
+                                    dbc.Progress(
+                                        value=100,
+                                        striped=True,
+                                        animated=True,
+                                        color='info',
+                                        style={'height': '16px', 'borderRadius': '4px'},
+                                    ),
+                                ],
+                                style={'display': 'none'},
+                            )
+                        ], width=8)
+                    ], className='mb-2'),
+
                     # Status Output
                     dbc.Row([
                         dbc.Col([

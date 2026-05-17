@@ -10,7 +10,7 @@ rup_config={'model': 'l1',
 class Rupture:
     def __init__(self, trace):
         self.trace = np.array(trace)
-        self.config = rup_config
+        self.config = dict(rup_config)   # copy so mutations don't affect the global default
         
     def det_bkps(self, pad_width=30):
         config = self.config
@@ -82,7 +82,6 @@ class Rupture:
             if censor_mode in ['right', 'both'] and mean_intensity >= u_val:
                 time_bkps.append(sm_time[-1])
             elif censor_mode in ['left', 'both'] and mean_intensity <= l_val:
-                time_bkps.append(sm_time[0]) 
-            print(time_bkps)
+                time_bkps.append(sm_time[0])
                 
         return time_bkps

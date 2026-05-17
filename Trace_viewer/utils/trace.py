@@ -2,7 +2,7 @@ from .smoothing import uf, sa, mf, sg
 import numpy as np
 import plotly.graph_objects as go
 
-def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, hmm_fret_g, bkps, lag, smooth_mode, show, polyorder=2,rup_bkps=None, channel='r',active_tab='Aois'):
+def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, br, time, bkps, lag, smooth_mode, show, polyorder=2, rup_bkps=None, channel='r', active_tab='Aois'):
     """
     Update the plot traces in the figure for the given trace index 'i' using the specified smoothing.
 
@@ -142,20 +142,6 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
     else:
         selectors = ['rr', 'r_bkps']
         clear_trace(fig, selectors)
-
-    # ---------------------------
-    # Update HMM trace.
-    # ---------------------------
-    if np.any(hmm_fret_g[i]):
-        sm_time_g = sm(time['g'], lag)
-        fig.update_traces(
-            x=sm_time_g[:hmm_fret_g[i].shape[0]],
-            y=hmm_fret_g[i].reshape(-1),
-            visible=('HMM' not in show),
-            selector=dict(name='HMM_fret_g')
-        )
-    else:
-        fig.update_traces(x=[], y=[], selector=dict(name='HMM_fret_g'))
 
     # ---------------------------
     # Update x-axis range based on time data.
