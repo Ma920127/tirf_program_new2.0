@@ -133,7 +133,6 @@ def tools_tab():
                 children=[
                     html.Button('Save breakpoints', id='save_bkps'),
                     html.Button('Load breakpoints', id='load_bkps'),
-                    html.Button('Rupture', id='rupture', disabled=True),
                     html.Button('Rescale', id='rescale'),
                     dcc.Dropdown([], None, clearable=False, searchable=False,
                                  style={'width': '100px'}, id='channel')

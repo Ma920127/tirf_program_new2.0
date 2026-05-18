@@ -513,7 +513,8 @@ class HMM_fitter:
         'gg': 'time_g', 'bb': 'time_b', 'rr': 'time_r',
     }
 
-    def save_hmm(self, hmm_states_dict=None, hmm_means_dict=None, hmm_mask=None):
+    def save_hmm(self, hmm_states_dict=None, hmm_means_dict=None, hmm_mask=None,
+                 timestamp=None):
         """
         Save in-memory HMM predictions to a single compressed hmm.npz.
 
@@ -531,13 +532,18 @@ class HMM_fitter:
         hmm_means_dict  : dict {channel: 1-D float64 array}
             Fitted means per channel (sorted low→high).
         hmm_mask : ignored (kept for API compatibility)
+        timestamp : str or None
+            Optional 'YYYYMMDD_HHMMSS' string to use for the backup file name.
+            When None a fresh timestamp is generated internally.
 
         Returns
         -------
         saved : list[str]  channel names successfully written
+        ts    : str        timestamp actually used for the backup rename
         """
         if not hmm_states_dict:
-            return []
+            ts = timestamp if timestamp else time.strftime('%Y%m%d_%H%M%S')
+            return [], ts
 
         raw = np.load(self.path + r'\data.npz')
         per_channel, saved = {}, []
@@ -582,16 +588,17 @@ class HMM_fitter:
             except Exception as e:
                 print(f'save_hmm: skipped {ch}: {e}')
 
+        ts = timestamp if timestamp else time.strftime('%Y%m%d_%H%M%S')
+
         if per_channel:
             out_path = os.path.join(self.path, 'hmm.npz')
             if os.path.exists(out_path):
-                ts     = time.strftime('%Y%m%d_%H%M%S')
                 backup = os.path.join(self.path, f'hmm_{ts}.npz')
                 os.rename(out_path, backup)
                 print(f'save_hmm: backed up previous file → hmm_{ts}.npz')
             np.savez_compressed(out_path, **per_channel)
 
-        return saved
+        return saved, ts
 
     def load_hmm(self):
         """

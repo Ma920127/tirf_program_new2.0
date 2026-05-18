@@ -699,13 +699,6 @@ def register_callbacks(app, app_mod):
                 )
                 nearest_bidx = nearest_j - 1
 
-            print(f"[HMM BOUNDARY] click_x={click_x:.4f}  clicked_seg={clicked_seg_idx}  "
-                  f"bidx={nearest_bidx}  "
-                  f"left=[{fresh_segs[nearest_bidx].get('type')} "
-                  f"f{fresh_segs[nearest_bidx].get('f_start')}-{fresh_segs[nearest_bidx].get('f_end')}]  "
-                  f"right=[{fresh_segs[nearest_bidx + 1].get('type') if nearest_bidx + 1 < len(fresh_segs) else 'N/A'} "
-                  f"f{fresh_segs[nearest_bidx + 1].get('f_start') if nearest_bidx + 1 < len(fresh_segs) else '?'}-"
-                  f"{fresh_segs[nearest_bidx + 1].get('f_end') if nearest_bidx + 1 < len(fresh_segs) else '?'}]")
 
             fig_sel = make_hmm_bar_figure(fresh_segs, vs, ve, nearest_bidx,
                                           excluded_indices=excluded)
@@ -994,38 +987,27 @@ def register_callbacks(app, app_mod):
         # bar_seg == -1     → fallback: infer from click position (legacy behaviour)
         clicked_seg = int(bar_seg) if bar_seg is not None else -1
 
-        print(f"[HMM TRACE CLICK] click_x={click_x:.4f}  f_click={f_click}  "
-              f"f_boundary={f_boundary}  bidx={bidx}  bar_seg={clicked_seg}  "
-              f"left=[{seg_left.get('type')} f{seg_left.get('f_start')}-{seg_left.get('f_end')}]  "
-              f"right=[{seg_right.get('type')} f{seg_right.get('f_start')}-{seg_right.get('f_end')}]")
-
         arr = hmm_states[ch]
 
         if clicked_seg == bidx + 1:
             # ── Expand seg_right LEFTWARD ────────────────────────────────────
             # Frames from f_click up to (but not including) f_boundary become seg_right's state
             if f_click >= f_boundary:
-                # Click is inside seg_right or on the boundary → already incorporated, no-op
-                print("[HMM TRACE CLICK] no-op: click inside seg_right (already incorporated)")
                 raise PreventUpdate
             fill = (np.nan  if seg_right['type'] == 'pb'
                     else None if seg_right['type'] == 'no_prediction'
                     else int(seg_right['state']))
             arr[mol, f_click:f_boundary] = fill
-            print(f"[HMM TRACE CLICK] expand seg_right LEFT: f{f_click}-{f_boundary-1} → {fill}")
 
         elif clicked_seg == bidx:
             # ── Expand seg_left RIGHTWARD ────────────────────────────────────
             # Frames from f_boundary through f_click become seg_left's state
             if f_click < f_boundary:
-                # Click is inside seg_left → already incorporated, no-op
-                print("[HMM TRACE CLICK] no-op: click inside seg_left (already incorporated)")
                 raise PreventUpdate
             fill = (np.nan  if seg_left['type'] == 'pb'
                     else None if seg_left['type'] == 'no_prediction'
                     else int(seg_left['state']))
             arr[mol, f_boundary:f_click + 1] = fill
-            print(f"[HMM TRACE CLICK] expand seg_left RIGHT: f{f_boundary}-{f_click} → {fill}")
 
         else:
             # ── Fallback: position-based (bar_seg unknown) ───────────────────
@@ -1040,7 +1022,6 @@ def register_callbacks(app, app_mod):
                         else int(seg_left['state']))
                 arr[mol, f_boundary:f_click + 1] = fill
             else:
-                print("[HMM TRACE CLICK] no-op: fallback, f_click == f_boundary")
                 raise PreventUpdate
 
         if ch == 'fret_g':

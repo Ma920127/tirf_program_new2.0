@@ -20,6 +20,7 @@ from loader import Loader
 from Hidden_Markov.hmm_fitter_new import HMM_fitter
 from utils.dwell_manager import DwellManager
 from utils.dwell_calculator import _extract_dwells
+from utils.transition_counter import save_transition_txt
 from Rupture import Rupture
 from utils.smoothing import uf, sa, mf, sg
 import plotly.graph_objects as go
@@ -124,7 +125,6 @@ def toggle_poly_input(method):
     Input('save_bkps','n_clicks'),
     Input('load_bkps','n_clicks'),
     Input('loadp', 'n_clicks'),
-    Input('rupture','n_clicks'),
     Input('set_good','n_clicks'),
     Input('set_bad','n_clicks'),
     Input('set_colocalized','n_clicks'),
@@ -157,7 +157,7 @@ def toggle_poly_input(method):
     State('rup-channel', 'value')
     )
 
-def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, rupture, good, bad, coloc, select, scatter, smooth, smooth_method, polyorder, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, rup_status, active_tab, i, path, 
+def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mode, save, load, loadp, good, bad, coloc, select, scatter, smooth, smooth_method, polyorder, rescale, relayout, channel, chp_find_0, chp_find_1, confirm_reset, rup_status, active_tab, i, path,
                chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1, event,rup_channel):
     changed_id = [p['prop_id'] for p in callback_context.triggered][0]
     global N_traces, fig, fig2, idx, total_frame, color, good_style, bad_style, bmode
@@ -1157,15 +1157,30 @@ def hmm_save_npz(n_clicks, path):
         return '✗ No folder path loaded.'
 
     global hmm_mask
-    saved = HMM_fitter(path).save_hmm(
+    # Generate timestamp once so hmm.npz backup and transition.txt backup
+    # both carry the identical suffix (e.g. hmm_20260518_143200.npz +
+    # transition_20260518_143200.txt).
+    ts = rtime.strftime('%Y%m%d_%H%M%S')
+    saved, ts_used = HMM_fitter(path).save_hmm(
         hmm_states_dict=hmm_states,
         hmm_means_dict=hmm_means,
         hmm_mask=hmm_mask,
+        timestamp=ts,
     )
 
     if not saved:
         return '✗ No fitted HMM data found. Run HMM fitting first.'
-    return f'✓ Saved [{", ".join(saved)}] → hmm.npz'
+
+    # Save companion transition.txt with the same backup timestamp
+    t_suffix = ''
+    try:
+        t_written = save_transition_txt(path, hmm_states, hmm_means, ts_used)
+        t_suffix = ' + transition.txt' if t_written else ''
+    except Exception as e:
+        print(f'transition.txt save error: {e}')
+        t_suffix = ' (transition.txt failed)'
+
+    return f'✓ Saved [{", ".join(saved)}] → hmm.npz{t_suffix}'
 
 
 # ══════════════════════════════════════════════════════════════════════════════
