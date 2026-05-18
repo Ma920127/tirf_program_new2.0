@@ -990,24 +990,38 @@ def register_callbacks(app, app_mod):
         arr = hmm_states[ch]
 
         if clicked_seg == bidx + 1:
-            # ── Expand seg_right LEFTWARD ────────────────────────────────────
-            # Frames from f_click up to (but not including) f_boundary become seg_right's state
-            if f_click >= f_boundary:
+            # ── Clicked seg_right: boundary snaps to f_click ─────────────────
+            if f_click == f_boundary:
                 raise PreventUpdate
-            fill = (np.nan  if seg_right['type'] == 'pb'
-                    else None if seg_right['type'] == 'no_prediction'
-                    else int(seg_right['state']))
-            arr[mol, f_click:f_boundary] = fill
+            elif f_click < f_boundary:
+                # Move boundary LEFT — fill [f_click : f_boundary] with seg_right's state
+                fill = (np.nan  if seg_right['type'] == 'pb'
+                        else None if seg_right['type'] == 'no_prediction'
+                        else int(seg_right['state']))
+                arr[mol, f_click:f_boundary] = fill
+            else:
+                # Move boundary RIGHT — fill [f_boundary : f_click+1] with seg_left's state
+                fill = (np.nan  if seg_left['type'] == 'pb'
+                        else None if seg_left['type'] == 'no_prediction'
+                        else int(seg_left['state']))
+                arr[mol, f_boundary:f_click + 1] = fill
 
         elif clicked_seg == bidx:
-            # ── Expand seg_left RIGHTWARD ────────────────────────────────────
-            # Frames from f_boundary through f_click become seg_left's state
-            if f_click < f_boundary:
+            # ── Clicked seg_left: boundary snaps to f_click ──────────────────
+            if f_click == f_boundary:
                 raise PreventUpdate
-            fill = (np.nan  if seg_left['type'] == 'pb'
-                    else None if seg_left['type'] == 'no_prediction'
-                    else int(seg_left['state']))
-            arr[mol, f_boundary:f_click + 1] = fill
+            elif f_click >= f_boundary:
+                # Move boundary RIGHT — fill [f_boundary : f_click+1] with seg_left's state
+                fill = (np.nan  if seg_left['type'] == 'pb'
+                        else None if seg_left['type'] == 'no_prediction'
+                        else int(seg_left['state']))
+                arr[mol, f_boundary:f_click + 1] = fill
+            else:
+                # Move boundary LEFT — fill [f_click : f_boundary] with seg_right's state
+                fill = (np.nan  if seg_right['type'] == 'pb'
+                        else None if seg_right['type'] == 'no_prediction'
+                        else int(seg_right['state']))
+                arr[mol, f_click:f_boundary] = fill
 
         else:
             # ── Fallback: position-based (bar_seg unknown) ───────────────────
