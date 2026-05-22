@@ -21,6 +21,7 @@ from Hidden_Markov.hmm_fitter_new import HMM_fitter
 from utils.dwell_manager import DwellManager
 from utils.dwell_calculator import _extract_dwells
 from utils.transition_counter import save_transition_txt
+import utils.undo_manager as undo
 from Rupture import Rupture
 from utils.smoothing import uf, sa, mf, sg
 import plotly.graph_objects as go
@@ -167,6 +168,12 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     if ('n_events' in changed_id) and (event['key'] not in ['q', 'w', 'z', 'x', 'c']):
         raise PreventUpdate()
 
+    # Ctrl+Z is reserved for the dedicated undo callbacks — update_fig must
+    # ignore it, otherwise the plain 'z' branch below would mark the trace
+    # as Good.  The undo callbacks handle the actual revert.
+    if ('n_events' in changed_id) and undo.is_ctrl_z(event):
+        raise PreventUpdate()
+
     # On HMM tab, trace-graph clicks are handled exclusively by hmm_trace_click.
     # Skip update_fig so breakpoints are not added and the figure is not needlessly redrawn.
     if active_tab == 'HMM' and changed_id == 'graph.clickData':
@@ -184,6 +191,7 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
         tot_dtime = []
         i = 0
         new = 1
+        undo.clear_all()   # new dataset — drop stale undo history
 
     ##rescale##
     if 'rescale' in changed_id:
@@ -214,14 +222,46 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
         print('selected_g save')
         np.save(path+r'/colocalized_list.npy', colocalized_list)
      
+    ## --- UNDO (Step 4a): snapshot bkps before breakpoints_utils mutates it.
+    ## Only on the breakpoint-editing tabs; the Rupture/HMM tabs are excluded
+    ## so Ctrl+Z stays a no-op there.  A graph click resolves its channel
+    ## inside breakpoints_utils (from the curve number), so a click cannot be
+    ## scoped to one channel here — snapshot the whole dict instead.
+    if active_tab in ('Tools', 'Aois', 'GMM'):
+        if 'graph.clickData' in changed_id:
+            undo.push_bkps_all(bkps)
+        elif ('dtime' in changed_id) or ('etime' in changed_id):
+            undo.push_bkps_single(bkps, channel, i)
+        elif 'confirm-reset' in changed_id:
+            undo.push_bkps_all(bkps)
+        elif mode in ('Clear All', 'Set All'):
+            undo.push_bkps_all(bkps)
+        elif mode == 'Clear':
+            undo.push_bkps_single(bkps, channel, i)
+
     ##breakpoints## (Added polyorder)
     bkps, mode, confirm_reset_show, channel_error_show = breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smooth, smooth_mode, polyorder)
     
     ##save / load breakpoints##
     bkps = sl_bkps(changed_id, path, bkps, mode)
 
+    ## --- UNDO (Step 4b): snapshot bkps before find_chp (auto-detect) mutates
+    ## it.  'current trace' touches one channel/one trace → single snapshot;
+    ## 'all traces'/'all good' touch many traces → whole-dict snapshot.
+    if active_tab in ('Tools', 'Aois', 'GMM'):
+        if 'chp_find_0' in changed_id:
+            if chp_target_0 == 'current trace':
+                undo.push_bkps_single(bkps, chp_channel_0, i)
+            else:
+                undo.push_bkps_all(bkps)
+        elif 'chp_find_1' in changed_id:
+            if chp_target_1 == 'current trace':
+                undo.push_bkps_single(bkps, chp_channel_1, i)
+            else:
+                undo.push_bkps_all(bkps)
+
     # Auto-Detect Breakpoints (Added polyorder)
-    bkps, channel_error_show = find_chp(changed_id, fret_g, fret_b, rr, gg, gr, bb, bg, br, i, time, select_list_g, 
+    bkps, channel_error_show = find_chp(changed_id, fret_g, fret_b, rr, gg, gr, bb, bg, br, i, time, select_list_g,
              chp_mode_0, chp_comp_0, chp_thres_0, chp_channel_0, chp_target_0, chp_mode_1, chp_comp_1, chp_thres_1, chp_channel_1, chp_target_1,
              bkps, smooth, smooth_mode, polyorder)
 
@@ -272,6 +312,55 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     relayout_out = relayout if 'rescale' in changed_id else no_update
     return fig, i_out, str_g_bkps, str_b_bkps, mode, nnote, good_style, bad_style, colocalized_style, ch_label, ch_label, ch_label, confirm_reset_show, channel_error_show, relayout_out
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Undo (Ctrl+Z) — breakpoint edits  [Tools / Aois / GMM tabs]
+# ══════════════════════════════════════════════════════════════════════════════
+@app.callback(
+    Output('graph', 'figure', allow_duplicate=True),
+    Input('key_events', 'n_events'),
+    State('key_events', 'event'),
+    State('tabs', 'value'),
+    State('i', 'value'),
+    State('scatter', 'value'),
+    State('smooth', 'value'),
+    State('smooth_method', 'value'),
+    State('polyorder', 'value'),
+    State('show', 'value'),
+    State('rup-channel', 'value'),
+    prevent_initial_call=True,
+)
+def undo_bkps_callback(n_events, event, active_tab, i, scatter, smooth,
+                       smooth_method, polyorder, show, rup_channel):
+    """Ctrl+Z on the Tools / Aois / GMM tabs — revert the last breakpoint edit.
+
+    HMM-tab undo is handled separately in utils/HMM_slidebar.py; this callback
+    deliberately fires only on the breakpoint-editing tabs.
+    """
+    # Only act on Ctrl+Z, and only on the breakpoint-editing tabs.
+    if not undo.is_ctrl_z(event):
+        raise PreventUpdate
+    if active_tab not in ('Tools', 'Aois', 'GMM'):
+        raise PreventUpdate
+
+    snapshot = undo.pop_bkps()
+    if snapshot is None:
+        raise PreventUpdate          # nothing left to undo
+
+    global bkps, fig
+    undo.restore_bkps(bkps, snapshot)
+
+    # Re-render the trace graph with the reverted breakpoints.  relayout=None
+    # keeps the current zoom (the figure carries uirevision=True).
+    i = int(i) if i is not None else 0
+    fig = update_trace(fig, None, i, scatter,
+                       fret_g, fret_b, rr, gg, gr, bb, bg, br, time,
+                       bkps, smooth, smooth_method, show,
+                       polyorder=polyorder,
+                       rup_bkps=rup_bkps,
+                       channel=rup_channel,
+                       active_tab=active_tab)
+    return fig
 
 
 @app.callback(

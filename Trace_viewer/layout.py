@@ -17,7 +17,7 @@ def make_app(fig, fig_blob, fig2):
         transforms=[BlockingCallbackTransform(timeout=10)]
     )
 
-    events = [{'event': 'keydown', 'props': ['key']}]
+    events = [{'event': 'keydown', 'props': ['key', 'ctrlKey']}]
 
     app.layout = html.Div([
         EventListener(id='key_events', events=events),

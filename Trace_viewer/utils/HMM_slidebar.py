@@ -10,6 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 from dash import Input, Output, State, no_update, callback_context, Patch
 from dash.exceptions import PreventUpdate
+from . import undo_manager as undo
 
 
 # ── Visual constants ───────────────────────────────────────────────────────────
@@ -752,14 +753,6 @@ def register_callbacks(app, app_mod):
             if clicked_idx is None:
                 raise PreventUpdate
 
-            # ── Diagnostic prints — remove once stable ───────────────────
-            print(f"[HMM DELETE] click_x={click_x:.4f}  clicked_idx={clicked_idx}")
-            print("[HMM DELETE] Segments before fill:")
-            for _k, _s in enumerate(fresh_segs):
-                _mk = " <-- DELETE" if _k == clicked_idx else ""
-                print(f"  [{_k}] {_s['type']}  state={_s.get('state')}  "
-                      f"f{_s.get('f_start')}-{_s.get('f_end')}{_mk}")
-
             del_seg = fresh_segs[clicked_idx]
             f0 = int(del_seg['f_start'])
             f1 = int(del_seg['f_end'])
@@ -780,9 +773,9 @@ def register_callbacks(app, app_mod):
                     break
 
             # ── Step 3: fill the deleted region ──────────────────────────────
-            print(f"[HMM DELETE] left_state={left_state}  right_state={right_state}  f0={f0}  f1={f1}")
-
             arr = hmm_states[ch]
+            # --- UNDO (Step 6b): snapshot before the Delete fill ---
+            undo.push_hmm(hmm_states, ch, mol)
             if left_state is None and right_state is None:
                 arr[mol, f0:f1 + 1] = None
             elif left_state is None:
@@ -793,15 +786,6 @@ def register_callbacks(app, app_mod):
                 f_mid = (f0 + f1) // 2
                 arr[mol, f0      : f_mid + 1] = left_state
                 arr[mol, f_mid + 1: f1 + 1  ] = right_state
-
-            # Show what the re-built segments look like after the fill
-            _trace_after = np.asarray(arr[mol], dtype=object)
-            _segs_after  = trace_to_segments(_trace_after, t_arr)
-            _segs_after  = merge_same_state_segments(_segs_after, arr[mol])
-            print("[HMM DELETE] Segments AFTER fill:")
-            for _k, _s in enumerate(_segs_after):
-                print(f"  [{_k}] {_s['type']}  state={_s.get('state')}  "
-                      f"f{_s.get('f_start')}-{_s.get('f_end')}")
 
             if ch == 'fret_g':
                 app_mod.hmm_fret_g = hmm_states['fret_g']
@@ -988,6 +972,13 @@ def register_callbacks(app, app_mod):
         clicked_seg = int(bar_seg) if bar_seg is not None else -1
 
         arr = hmm_states[ch]
+
+        # --- UNDO (Step 6a): snapshot this molecule's state row before the
+        # boundary edit.  f_click == f_boundary is a no-op in every branch
+        # below (raises PreventUpdate), so skip the snapshot in that case to
+        # avoid wasting an undo slot.
+        if f_click != f_boundary:
+            undo.push_hmm(hmm_states, ch, mol)
 
         if clicked_seg == bidx + 1:
             # ── Clicked seg_right: boundary snaps to f_click ─────────────────
@@ -1180,9 +1171,40 @@ def register_callbacks(app, app_mod):
     def hmm_add_keypress(n_events, event, vacuum, i, channel,
                          active_tab, relayout_data,
                          left_mode, left_cut, right_cut):
-        """Assign the pending vacuum state to a fitted HMM state on digit keypress."""
+        """Assign the pending vacuum state to a fitted HMM state on digit keypress.
+
+        Also handles Ctrl+Z (undo the last HMM state amendment).  The undo
+        logic is merged into this callback on purpose: dash_extensions.enrich
+        derives the allow_duplicate output suffix from the callback's input
+        list, so a *separate* callback sharing the sole input
+        'key_events.n_events' and the same outputs ('hmm-state-bar.figure',
+        'hmm-segments-store.data') would produce identical output IDs and
+        crash the whole callback system with "Duplicate callback outputs".
+        """
         if active_tab != 'HMM':
             raise PreventUpdate
+
+        # ── Ctrl+Z → undo the last HMM state amendment ───────────────────────
+        if undo.is_ctrl_z(event):
+            snapshot = undo.pop_hmm()
+            if snapshot is None:
+                raise PreventUpdate            # nothing left to undo
+            restored_ch = undo.restore_hmm(app_mod.hmm_states, snapshot)
+            if restored_ch is None:
+                raise PreventUpdate            # snapshot no longer applies
+            if restored_ch == 'fret_g':
+                app_mod.hmm_fret_g = app_mod.hmm_states['fret_g']
+            ch_u    = channel or 'fret_g'
+            t_arr_u = app_mod.time.get(CHANNEL_TIME_KEY.get(ch_u, 'fret_g'), [])
+            if len(t_arr_u) == 0:
+                raise PreventUpdate
+            mol_u = int(i) if i is not None else 0
+            fig_u, segs_u = _build_from_hmm_states(
+                ch_u, mol_u, t_arr_u, relayout_data,
+                left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
+            )
+            return fig_u, segs_u, no_update    # vacuum store unchanged
+
         # Only act when the vacuum is fully defined (both boundaries chosen)
         if vacuum is None or vacuum.get('phase') != 'vacuum_ready':
             raise PreventUpdate
@@ -1205,6 +1227,8 @@ def register_callbacks(app, app_mod):
         f0  = int(vacuum['f_start'])
         f1  = int(vacuum['f_end'])
         arr = app_mod.hmm_states[ch]
+        # --- UNDO (Step 6b): snapshot before the Add / Change-state fill ---
+        undo.push_hmm(app_mod.hmm_states, ch, mol)
         arr[mol, f0:f1 + 1] = num   # store int state index directly
         if ch == 'fret_g':
             app_mod.hmm_fret_g = app_mod.hmm_states['fret_g']
