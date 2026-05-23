@@ -15,7 +15,7 @@ def tools_tab():
                     html.Div(
                         children=[
                             dcc.Checklist(
-                                ['BB', 'BG', 'BR', 'GG', 'GR', 'RR', 'FRET BG', 'FRET GR', 'Tot B', 'Tot G', 'HMM'],
+                                ['BB', 'BG', 'BR', 'GG', 'GR', 'RR', 'FRET BG', 'FRET GR', 'Tot B', 'Tot G'],
                                 ['Tot B', 'Tot G'],
                                 inline=True,
                                 inputStyle={"margin-left": "10px"},
