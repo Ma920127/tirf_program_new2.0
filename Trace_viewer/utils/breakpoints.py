@@ -139,6 +139,8 @@ def sl_bkps(changed_id, path, bkps, mode):
             shutil.copy(path + r'/breakpoints.npz', path + f'/breakpoints_backup_{t.tm_hour}_{t.tm_min}_{t.tm_sec}.npz')
         except:
             print('No existing save file found.')
+        if not path:
+            raise ValueError("No folder path loaded — cannot save breakpoints. Tell 🐎")
         for key in bkps:
             bkps[key] = np.array(bkps[key], dtype=object)
         np.savez(path + r'/breakpoints.npz', **bkps)
@@ -147,8 +149,8 @@ def sl_bkps(changed_id, path, bkps, mode):
         try:
             bkps = dict(np.load(path + r'/breakpoints.npz', allow_pickle=True))
             #print(bkps['fret_g'])
-        except:
-            print('File not found')
+        except Exception as e:
+            print(f"breakpoints.npz not found or corrupted at '{path}': {e}. Tell 🐎")
     return bkps
 
 

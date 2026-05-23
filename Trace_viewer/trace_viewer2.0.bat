@@ -1,4 +1,5 @@
 @echo off
+chcp 65001
 REM Open Chrome to the specified URL.
 start chrome.exe --new-tab http://127.0.0.1:8041/
 

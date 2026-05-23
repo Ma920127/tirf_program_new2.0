@@ -55,6 +55,8 @@ def sg(t, lag, polyorder=2, mode='interp', axis=-1):
     Corresponds to 'Savitzky-Golay'.
     Note: lag (window_length) must be odd and greater than polyorder.
     """
+    if lag <= 0:
+        raise ValueError(f"Smoothing window 'lag' must be positive, got {lag}. Tell 🐎")
     # Ensure window_length is odd
     if lag % 2 == 0:
         lag += 1

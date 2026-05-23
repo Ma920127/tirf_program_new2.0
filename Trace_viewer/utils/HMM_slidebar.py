@@ -1226,6 +1226,8 @@ def register_callbacks(app, app_mod):
         mol = int(i)
         f0  = int(vacuum['f_start'])
         f1  = int(vacuum['f_end'])
+        if ch not in app_mod.hmm_states:
+            raise KeyError(f"Channel '{ch}' has no HMM prediction — run HMM fitting first. Tell 🐎")
         arr = app_mod.hmm_states[ch]
         # --- UNDO (Step 6b): snapshot before the Add / Change-state fill ---
         undo.push_hmm(app_mod.hmm_states, ch, mol)

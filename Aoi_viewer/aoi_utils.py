@@ -125,7 +125,7 @@ def move_blobs(coord_list, selector, step, changed_id):
 def load_path(thres, path, fsc, camera_size=1024):
     # 1. Check if the main directory even exists
     if not os.path.exists(path):
-        raise FileNotFoundError(f"ERROR: The folder path '{path}' does not exist.")
+        raise FileNotFoundError(f"ERROR: The folder path '{path}' does not exist. Tell 🐎")
 
     # 2. Check for the specific g, r, b subfolders
     has_g = os.path.exists(os.path.join(path, 'g'))
@@ -134,7 +134,7 @@ def load_path(thres, path, fsc, camera_size=1024):
 
     # 3. If NONE of the folders exist, raise an error immediately
     if not (has_g or has_r or has_b):
-        raise FileNotFoundError(f"ERROR: No 'g', 'r', or 'b' folders found inside '{path}'. Please check your data.")
+        raise FileNotFoundError(f"ERROR: No 'g', 'r', or 'b' folders found inside '{path}'. Please check your data. Tell 🐎")
 
     time_params = cal(path)
     loader = Image_Loader(0, thres, path, *time_params, 1, camera_size=camera_size)

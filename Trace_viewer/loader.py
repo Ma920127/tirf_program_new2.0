@@ -8,6 +8,8 @@ class Loader :
         self.path = path
     
     def load_traces(self):
+        if not os.path.exists(self.path + r'\data.npz'):
+            raise FileNotFoundError(f"data.npz not found at '{self.path}'. Tell 🐎")
         Q1 = np.load(self.path+r'\data.npz')
 
         fret_g = Q1['fret_g']

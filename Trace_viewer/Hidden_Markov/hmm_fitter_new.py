@@ -127,15 +127,22 @@ class HMM_fitter:
     # Data loading
     # ──────────────────────────────────────────────────────────────
     def load_traces(self, channel='fret_g'):
+        if channel not in CHANNEL_CONFIG:
+            raise KeyError(f"Unknown channel '{channel}'. Valid channels: {list(CHANNEL_CONFIG.keys())}. Tell 🐎")
         cfg = CHANNEL_CONFIG[channel]
         self.channel = channel
         self.cfg = cfg
 
+        if not os.path.exists(self.path + r'\\data.npz'):
+            raise FileNotFoundError(f"data.npz not found at '{self.path}'. Tell 🐎")
         data = np.load(self.path + r'\\data.npz')
         self.Q    = data[cfg['npz_key']]
         self.time = data[cfg['time_key']]
         self.N_traces = self.Q.shape[0]
-        self.selected = np.load(self.path + r'\\selected_g.npy').astype(int)
+        try:
+            self.selected = np.load(self.path + r'\\selected_g.npy').astype(int)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"selected_g.npy not found at '{self.path}' — save selections first. Tell 🐎")
 
         # Load intensity channels needed for photobleach detection
         self.gg = data['gg']

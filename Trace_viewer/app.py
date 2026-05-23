@@ -1041,7 +1041,8 @@ def run_rpt_analysis(n_clicks_run, n_clicks_run_all, n_clicks_clear, n_clicks_cl
                 )
                 rup_bkps[j] = time_bkps
                 fitted_count += 1
-            except:
+            except Exception as e:
+                print(f"Rupture fit failed for trace {j}: {e}. Tell 🐎")
                 continue
 
         return f"Fit All Complete! Predicted {fitted_count} new traces. Kept {skipped_count} current manual predictions."
