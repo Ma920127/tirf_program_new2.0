@@ -81,6 +81,8 @@ def _sanitize_fitted_model(model, k, seed_means, min_covar):
     return model
 
 
+
+
 CHANNEL_CONFIG = {
     'fret_g': {'npz_key': 'fret_g', 'time_key': 'time_g', 'clip': (0.01, 0.99), 'is_fret': True,  'ylabel': 'FRET'},
     'fret_b': {'npz_key': 'fret_b', 'time_key': 'time_b', 'clip': (0.01, 0.99), 'is_fret': True,  'ylabel': 'FRET'},
@@ -276,28 +278,25 @@ class HMM_fitter:
                 # first NaN frame, reflecting the PB filter and all manual edits.
                 if hd_states is not None and i < len(hd_states):
                     row = hd_states[i]
-                    pb_at = len(row)          # assume no PB by default
-                    for f in range(len(row)):
-                        v = row[f]
-                        if v is not None:
-                            try:
-                                if np.isnan(float(v)):
-                                    pb_at = f
-                                    break
-                            except (TypeError, ValueError):
-                                pass
+                    # type(v) is float catches np.nan (stored as Python float).
+                    # v != v is the fastest NaN test — NaN is the only value
+                    # where this holds.  Avoids try/except overhead per frame.
+                    pb_at = next(
+                        (f for f, v in enumerate(row) if type(v) is float and v != v),
+                        len(row)
+                    )
                     end_frame = min(pb_at, Q.shape[1])
 
                 # ── Priority 2: raw hmm_mask ──────────────────────────────────
                 # PB frames are np.nan; usable frames are 0.
                 elif mask is not None and i < len(mask):
-                    for f in range(len(mask[i])):
-                        try:
-                            if np.isnan(float(mask[i][f])):
-                                end_frame = min(f // stride, Q.shape[1])
-                                break
-                        except (TypeError, ValueError):
-                            pass
+                    row_m     = mask[i]
+                    first_nan = next(
+                        (f for f, v in enumerate(row_m) if type(v) is float and v != v),
+                        None
+                    )
+                    if first_nan is not None:
+                        end_frame = min(first_nan // stride, Q.shape[1])
 
                 frag = Q[i][:end_frame].copy()
                 # Replace any NaN / inf so hmmlearn's Cholesky decomposition
@@ -373,23 +372,12 @@ class HMM_fitter:
         if r:
             print('fitting')
             tic = time.perf_counter()
+
             models, conv = [], []
 
             for e in tqdm(range(epoch)):
                 print(f'\n Epoch {e}')
 
-                # init_params='st': hmmlearn initialises startprob and transmat
-                # from data; means and covariances are set manually below.
-                #
-                # Initial covariance is set to data_var (global variance) —
-                # deliberately wide so every Gaussian covers the full data range
-                # and every state has non-zero posterior on the first E-step.
-                # This prevents dead states (zero posterior → 0/0 NaN in M-step)
-                # even when user means don't perfectly match the data clusters.
-                # EM then tightens covariances naturally as it converges.
-                # Sticky prior: uniform baseline (0.01) + extra weight on diagonal.
-                # sticky_w=1 → same as old scalar 0.01 (no bias).
-                # sticky_w>1 → self-transitions are preferred, reducing flicker.
                 transmat_prior = np.full((k, k), 0.01)
                 np.fill_diagonal(transmat_prior, 0.01 + float(sticky_w) - 1.0)
                 transmat_prior = np.clip(transmat_prior, 1e-6, None)
@@ -406,7 +394,6 @@ class HMM_fitter:
                 )
                 model.means_ = means   # user-provided starting point
 
-                # Wide initial covariance — large enough to keep all states alive
                 nf       = self.pro_Q.shape[1]
                 init_cov = max(data_var, min_covar * 100)
                 if covariance_type == 'full':
@@ -417,7 +404,15 @@ class HMM_fitter:
                     model._covars_ = np.eye(nf) * init_cov
                 else:   # spherical
                     model._covars_ = np.full(k, init_cov)
-                model.fit(self.pro_Q, length)
+                try:
+                    model.fit(self.pro_Q, length)
+                except ValueError as e:
+                    if 'underflow' in str(e):
+                        print("🐎 say re-fitting")
+                        model.implementation = 'log'
+                        model.fit(self.pro_Q, length)
+                    else:
+                        raise
                 # Sanitise immediately so conv[] is finite for argmax
                 _sanitize_fitted_model(model, k, means, min_covar)
                 models.append(model)
@@ -456,7 +451,7 @@ class HMM_fitter:
         print('predicting')
         tic = time.perf_counter()
         hidden_states = model.predict(self.pro_Q, length)
-        likelihood    = model.predict(self.pro_Q, length)
+        likelihood    = hidden_states   # reuse — predict() (Viterbi) is expensive
         aic = model.aic(self.pro_Q, length)
         bic = model.bic(self.pro_Q, length)
         toc = time.perf_counter()
