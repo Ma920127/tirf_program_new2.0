@@ -358,18 +358,40 @@ def hmm_tab():
 
                         html.Hr(className="my-3"),
 
-                        # ── Fitted states summary (read-only) ─────────────────
+                        # ── Fitted states summary + Merge Controls ────────────
+                        # Row 1: title + merge controls inline
+                        html.Div([
+                            html.H5("Current Fitted States",
+                                    className="mb-0 font-weight-bold"),
+                            html.Div([
+                                dbc.Label(
+                                    "Merge threshold",
+                                    style={'marginRight': '8px', 'marginBottom': '0'},
+                                ),
+                                dbc.Input(
+                                    id='hmm-merge-threshold',
+                                    type='number',
+                                    value=0.05, min=0, step='any',
+                                    style={'width': '80px', 'height': '32px',
+                                           'padding': '4px 8px',
+                                           'marginRight': '8px'},
+                                ),
+                                html.Button(
+                                    "🔀 Merge States",
+                                    id='hmm-merge-btn',
+                                    n_clicks=0,
+                                    className="btn btn-secondary",
+                                    style={"fontWeight": "bold",
+                                           "height": "32px",
+                                           "padding": "0 12px"},
+                                ),
+                            ], style={'display': 'flex', 'alignItems': 'center',
+                                      'marginLeft': 'auto'}),
+                        ], style={'display': 'flex', 'alignItems': 'center',
+                                  'marginBottom': '8px'}),
+                        # Row 2: table full width
                         dbc.Row([
                             dbc.Col([
-                                html.H6(
-                                    "Current Fitted States",
-                                    style={
-                                        'fontSize':    '13px',
-                                        'fontWeight':  'bold',
-                                        'color':       '#444',
-                                        'marginBottom':'6px',
-                                    }
-                                ),
                                 dash_table.DataTable(
                                     id='hmm-fitted-states-table',
                                     columns=[],
@@ -404,7 +426,16 @@ def hmm_tab():
                                     ],
                                 ),
                             ], width=12),
-                        ], className="mb-3"),
+                        ], className="mb-2"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Div(
+                                    id='hmm-merge-status',
+                                    className="text-muted",
+                                    style={'fontSize': '12px', 'fontStyle': 'italic'},
+                                ),
+                            ], width=12),
+                        ]),
 
                     ], width=6, style={
                         "borderLeft":  "2px solid #eaeaea",

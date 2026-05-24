@@ -179,6 +179,12 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     if active_tab == 'HMM' and changed_id == 'graph.clickData':
         raise PreventUpdate()
 
+    # Pure zoom / pan — Plotly.js already updates the viewport client-side.
+    # Re-sending the full figure here would wipe the colour-window shapes that
+    # update_color_windows applied via Patch(), causing them to disappear.
+    if changed_id == 'graph.relayoutData':
+        raise PreventUpdate()
+
     if fig['layout']['uirevision'] == False:
         fig['layout']['uirevision'] = True   
     
@@ -1194,6 +1200,9 @@ def hmm_clear_callback(n_clicks, channel, i, relayout_data):
     if channel not in hmm_states:
         raise PreventUpdate
 
+    # ── UNDO: snapshot the whole channel before wiping ────────────────────────
+    undo.push_hmm_channel(hmm_states, hmm_means, channel)
+
     # Clear the fitted means for this channel so the table empties
     hmm_means.pop(channel, None)
 
@@ -1229,6 +1238,103 @@ def hmm_clear_callback(n_clicks, channel, i, relayout_data):
 
     bar_fig = make_hmm_bar_figure(segments, view_start, view_end, -1)
     return segments, bar_fig, [], []
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Merge States — collapse states whose fitted means are within threshold
+# ══════════════════════════════════════════════════════════════════════════════
+@app.callback(
+    Output('hmm_means',           'data',   allow_duplicate=True),
+    Output('hmm-state-bar',       'figure', allow_duplicate=True),
+    Output('hmm-segments-store',  'data',   allow_duplicate=True),
+    Output('hmm-merge-status',    'children'),
+    Input('hmm-merge-btn', 'n_clicks'),
+    State('hmm-merge-threshold', 'value'),
+    State('hmm-channel',         'value'),
+    State('i',                   'value'),
+    State('graph',               'relayoutData'),
+    prevent_initial_call=True,
+)
+def hmm_merge_callback(n_clicks, threshold, channel, i, relayout_data):
+    global hmm_states, hmm_means, hmm_fret_g
+    if not n_clicks:
+        raise PreventUpdate
+    if channel not in hmm_means or channel not in hmm_states:
+        return no_update, no_update, no_update, '✗ No HMM prediction — run fitting first.'
+
+    # ── UNDO: snapshot the whole channel before merging ───────────────────────
+    undo.push_hmm_channel(hmm_states, hmm_means, channel)
+
+    mus = hmm_means[channel]          # sorted 1-D numpy array (low → high)
+    k   = len(mus)
+    thr = float(threshold) if threshold is not None else 0.05
+
+    # ── Group consecutive means within threshold ──────────────────────────────
+    # Reference = first (lowest) element of the current group — avoids chaining.
+    groups        = []
+    current_group = [0]
+    for idx in range(1, k):
+        if abs(mus[idx] - mus[current_group[0]]) <= thr:
+            current_group.append(idx)
+        else:
+            groups.append(current_group)
+            current_group = [idx]
+    groups.append(current_group)
+
+    n_after = len(groups)
+    if n_after == k:
+        return (no_update, no_update, no_update,
+                f'No states merged (threshold={thr}). All {k} states are well-separated.')
+
+    # ── Build old→new index mapping and new means ─────────────────────────────
+    mapping   = np.full(k, -1, dtype=int)
+    new_means = []
+    for new_idx, grp in enumerate(groups):
+        new_means.append(float(np.mean(mus[grp])))
+        for old_idx in grp:
+            mapping[old_idx] = new_idx
+
+    # ── Remap hmm_states[channel] (2-D object array) ──────────────────────────
+    # Read from original arr, write to new_arr — prevents aliasing when
+    # new_idx < old_idx.  Iterate over old state indices (≤10), not pixels.
+    arr     = hmm_states[channel]
+    new_arr = arr.copy()
+    for old_idx in range(k):
+        new_idx = int(mapping[old_idx])
+        if old_idx != new_idx:
+            new_arr[arr == old_idx] = new_idx
+    hmm_states[channel] = new_arr
+    if channel == 'fret_g':
+        hmm_fret_g = new_arr   # keep global mirror in sync
+
+    # ── Update global means ───────────────────────────────────────────────────
+    hmm_means[channel] = np.array(new_means, dtype=float)
+
+    # ── Rebuild segments + bar for the current molecule ───────────────────────
+    mol      = int(i) if i is not None else 0
+    time_key = hmm_bar.CHANNEL_TIME_KEY.get(channel, 'fret_g')
+    t_arr    = time.get(time_key, [])
+    if len(t_arr) == 0:
+        bar_fig  = no_update
+        segments = no_update
+    else:
+        row      = np.asarray(new_arr[mol], dtype=object) if mol < len(new_arr) else np.array([], dtype=object)
+        segments = trace_to_segments(row, t_arr)
+        segments = merge_same_state_segments(segments, row)
+        view_start = float(t_arr[0])
+        view_end   = float(t_arr[-1])
+        if relayout_data:
+            if 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
+                view_start = float(relayout_data['xaxis.range[0]'])
+                view_end   = float(relayout_data['xaxis.range[1]'])
+        bar_fig = make_hmm_bar_figure(segments, view_start, view_end, -1)
+
+    # ── Refresh hmm_means table (triggers update_fitted_states_table) ─────────
+    new_row = {str(p): (round(new_means[p], 4) if p < len(new_means) else -1)
+               for p in range(10)}
+    status  = f'✓ Merged: {k} → {n_after} states  (threshold={thr})'
+    print(f'[merge] {status}')
+    return [new_row], bar_fig, segments, status
 
 
 # ══════════════════════════════════════════════════════════════════════════════

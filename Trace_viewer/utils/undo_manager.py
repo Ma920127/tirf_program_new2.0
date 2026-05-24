@@ -171,6 +171,47 @@ def restore_hmm(hmm_states, snapshot):
     return None
 
 
+def push_hmm_channel(hmm_states, hmm_means, ch):
+    """Snapshot an ENTIRE channel's state array and means list.
+
+    Use before bulk operations that affect all molecules in one channel:
+    Merge States and HMM Clear.  Silently does nothing if ch is invalid.
+    """
+    if ch not in hmm_states:
+        return
+    arr   = hmm_states[ch]
+    means = hmm_means.get(ch)
+    _undo_hmm.append({
+        'scope': 'channel',
+        'ch':    ch,
+        'arr':   arr.copy(),
+        'means': np.array(means, dtype=float) if means is not None else np.array([]),
+    })
+    del _undo_hmm[:-UNDO_MAX]
+
+
+def restore_hmm_channel(hmm_states, hmm_means, snapshot):
+    """Apply a channel-scope HMM snapshot back onto the live dicts in place.
+
+    Returns the channel name that was restored, or None if nothing applied.
+    The caller is responsible for refreshing ``hmm_fret_g`` and rebuilding
+    the HMM bar figure afterwards.
+    """
+    if snapshot is None or snapshot.get('scope') != 'channel':
+        return None
+    ch, arr, means = snapshot['ch'], snapshot['arr'], snapshot['means']
+    if ch not in hmm_states:
+        return None
+    if arr.shape != hmm_states[ch].shape:
+        return None
+    hmm_states[ch][:] = arr
+    if len(means) > 0:
+        hmm_means[ch] = means.copy()
+    else:
+        hmm_means.pop(ch, None)
+    return ch
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Shared helpers
 # ─────────────────────────────────────────────────────────────────────────────

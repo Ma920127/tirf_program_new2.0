@@ -507,6 +507,97 @@ class HMM_fitter:
         # No auto-save here — user must click "Save hmm.npz" explicitly.
 
     # ──────────────────────────────────────────────────────────────
+    # State merging
+    # ──────────────────────────────────────────────────────────────
+    def merge_states(self, threshold=0.05):
+        """Merge HMM states whose fitted means are within *threshold* of each other.
+
+        After EM, two states can converge to nearly identical means (e.g. FRET
+        0.21 and 0.23) — visually the same level but producing spurious
+        transitions.  This method groups such states and remaps every frame in
+        ``result_hd_states`` to the merged state index.
+
+        Grouping rule
+        -------------
+        Means are already sorted low→high by ``cal_states``.  We scan left to
+        right; a state joins the *current* group when its mean is within
+        ``threshold`` of the group's **first** (lowest) mean.  This avoids the
+        chaining problem where three means [0.20, 0.23, 0.26] would all collapse
+        even though the outer two differ by 0.06.
+
+        Parameters
+        ----------
+        threshold : float
+            Maximum absolute difference between a candidate mean and the lowest
+            mean in the current group for them to be considered the same state.
+            Default 0.05 (suitable for FRET 0–1 scale).
+
+        Returns
+        -------
+        new_means : list[float]
+            Merged means sorted low→high.  Length ≤ original number of states.
+        n_before : int
+            Number of states before merging.
+        n_after : int
+            Number of states after merging.
+        """
+        mus      = self.mus.flatten()   # already sorted low→high by cal_states
+        k        = len(mus)
+        n_before = k
+
+        # ── Group consecutive means ───────────────────────────────────────────
+        # Reference for each group is its first (lowest) element.
+        groups        = []          # list[list[int]]  — original state indices
+        current_group = [0]
+
+        for i in range(1, k):
+            if abs(mus[i] - mus[current_group[0]]) <= threshold:
+                current_group.append(i)
+            else:
+                groups.append(current_group)
+                current_group = [i]
+        groups.append(current_group)
+
+        n_after = len(groups)
+
+        if n_after == n_before:
+            print(f'[merge_states] No states merged (threshold={threshold}). '
+                  f'All {k} states are well-separated.')
+            return list(mus), n_before, n_after
+
+        # ── Build old→new index mapping and compute new means ─────────────────
+        mapping   = np.full(k, -1, dtype=int)   # mapping[old_idx] = new_idx
+        new_means = []
+
+        for new_idx, grp in enumerate(groups):
+            new_means.append(float(np.mean(mus[grp])))
+            for old_idx in grp:
+                mapping[old_idx] = new_idx
+
+        print(f'[merge_states] {n_before} → {n_after} states  (threshold={threshold})')
+        for new_idx, grp in enumerate(groups):
+            src = ', '.join(f'S{i}={mus[i]:.4f}' for i in grp)
+            print(f'  New S{new_idx} ({new_means[new_idx]:.4f})  ←  {src}')
+
+        # ── Remap result_hd_states ────────────────────────────────────────────
+        # Each row is either an empty list (unselected / fully PB'd molecule)
+        # or a 1-D int array of state indices.  Apply the mapping vectorially.
+        if hasattr(self, 'result_hd_states'):
+            new_hd = []
+            for row in self.result_hd_states:
+                if len(row) == 0:
+                    new_hd.append(row)
+                    continue
+                row_arr = np.asarray(row, dtype=int)
+                new_hd.append(mapping[row_arr])
+            self.result_hd_states = new_hd
+
+        # ── Update self.mus ───────────────────────────────────────────────────
+        self.mus = np.array(new_means, dtype=float).reshape(-1, 1)
+
+        return new_means, n_before, n_after
+
+    # ──────────────────────────────────────────────────────────────
     # Unified save / load  (new hmm.npz nested-dict format)
     # ──────────────────────────────────────────────────────────────
 

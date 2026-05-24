@@ -588,7 +588,12 @@ def register_callbacks(app, app_mod):
             vacuum_t=vt,
             left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
         )
-        return fig, segs, bnd_out, vacuum_out, bseg_out
+        # On zoom/pan the segments are unchanged — only the bar window shifts.
+        # Returning no_update prevents update_color_windows from firing
+        # unnecessarily, which avoids the graph blink caused by the server
+        # round-trip patching graph.figure with identical shapes.
+        segs_out = no_update if triggered == 'graph' else segs
+        return fig, segs_out, bnd_out, vacuum_out, bseg_out
 
     # ════════════════════════════════════════════════════════════════════════
     # Callback 2 — INTERACT
@@ -1156,6 +1161,7 @@ def register_callbacks(app, app_mod):
         Output('hmm-state-bar',      'figure', allow_duplicate=True),
         Output('hmm-segments-store', 'data',   allow_duplicate=True),
         Output('hmm-vacuum-store',   'data',   allow_duplicate=True),
+        Output('hmm_means',          'data',   allow_duplicate=True),
         Input('key_events', 'n_events'),
         State('key_events',       'event'),
         State('hmm-vacuum-store', 'data'),
@@ -1189,21 +1195,54 @@ def register_callbacks(app, app_mod):
             snapshot = undo.pop_hmm()
             if snapshot is None:
                 raise PreventUpdate            # nothing left to undo
-            restored_ch = undo.restore_hmm(app_mod.hmm_states, snapshot)
-            if restored_ch is None:
-                raise PreventUpdate            # snapshot no longer applies
-            if restored_ch == 'fret_g':
-                app_mod.hmm_fret_g = app_mod.hmm_states['fret_g']
-            ch_u    = channel or 'fret_g'
-            t_arr_u = app_mod.time.get(CHANNEL_TIME_KEY.get(ch_u, 'fret_g'), [])
-            if len(t_arr_u) == 0:
-                raise PreventUpdate
-            mol_u = int(i) if i is not None else 0
-            fig_u, segs_u = _build_from_hmm_states(
-                ch_u, mol_u, t_arr_u, relayout_data,
-                left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
-            )
-            return fig_u, segs_u, no_update    # vacuum store unchanged
+
+            scope = snapshot.get('scope')      # 'channel' or None (single-mol)
+
+            if scope == 'channel':
+                # ── Channel-scope undo: Merge States or HMM Clear ────────────
+                restored_ch = undo.restore_hmm_channel(
+                    app_mod.hmm_states, app_mod.hmm_means, snapshot
+                )
+                if restored_ch is None:
+                    raise PreventUpdate
+                if restored_ch == 'fret_g':
+                    app_mod.hmm_fret_g = app_mod.hmm_states['fret_g']
+                ch_u    = channel or 'fret_g'
+                t_arr_u = app_mod.time.get(CHANNEL_TIME_KEY.get(ch_u, 'fret_g'), [])
+                if len(t_arr_u) == 0:
+                    raise PreventUpdate
+                mol_u = int(i) if i is not None else 0
+                fig_u, segs_u = _build_from_hmm_states(
+                    ch_u, mol_u, t_arr_u, relayout_data,
+                    left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
+                )
+                # Rebuild means_data so update_fitted_states_table refreshes
+                means = app_mod.hmm_means.get(ch_u)
+                if means is not None and len(means) > 0:
+                    means_row = {str(p): (round(float(means[p]), 4) if p < len(means) else -1)
+                                 for p in range(10)}
+                    means_data = [means_row]
+                else:
+                    means_data = []
+                return fig_u, segs_u, no_update, means_data
+
+            else:
+                # ── Single-molecule undo: vacuum fill or boundary edit ────────
+                restored_ch = undo.restore_hmm(app_mod.hmm_states, snapshot)
+                if restored_ch is None:
+                    raise PreventUpdate        # snapshot no longer applies
+                if restored_ch == 'fret_g':
+                    app_mod.hmm_fret_g = app_mod.hmm_states['fret_g']
+                ch_u    = channel or 'fret_g'
+                t_arr_u = app_mod.time.get(CHANNEL_TIME_KEY.get(ch_u, 'fret_g'), [])
+                if len(t_arr_u) == 0:
+                    raise PreventUpdate
+                mol_u = int(i) if i is not None else 0
+                fig_u, segs_u = _build_from_hmm_states(
+                    ch_u, mol_u, t_arr_u, relayout_data,
+                    left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
+                )
+                return fig_u, segs_u, no_update, no_update  # means unchanged
 
         # Only act when the vacuum is fully defined (both boundaries chosen)
         if vacuum is None or vacuum.get('phase') != 'vacuum_ready':
@@ -1245,7 +1284,7 @@ def register_callbacks(app, app_mod):
             ch, mol, t_arr, relayout_data,
             left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
         )
-        return fig, new_segs, None   # clear vacuum
+        return fig, new_segs, None, no_update   # clear vacuum; means unchanged
 
     # ════════════════════════════════════════════════════════════════════════
     # Callback 5 — FITTED STATES SUMMARY TABLE
