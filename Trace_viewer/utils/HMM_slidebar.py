@@ -1158,10 +1158,11 @@ def register_callbacks(app, app_mod):
     # Ignores keys that are out of range (> number of fitted states).
     # ════════════════════════════════════════════════════════════════════════
     @app.callback(
-        Output('hmm-state-bar',      'figure', allow_duplicate=True),
-        Output('hmm-segments-store', 'data',   allow_duplicate=True),
-        Output('hmm-vacuum-store',   'data',   allow_duplicate=True),
-        Output('hmm_means',          'data',   allow_duplicate=True),
+        Output('hmm-state-bar',           'figure',   allow_duplicate=True),
+        Output('hmm-segments-store',      'data',     allow_duplicate=True),
+        Output('hmm-vacuum-store',        'data',     allow_duplicate=True),
+        Output('hmm-fitted-states-table', 'columns',  allow_duplicate=True),
+        Output('hmm-fitted-states-table', 'data',     allow_duplicate=True),
         Input('key_events', 'n_events'),
         State('key_events',       'event'),
         State('hmm-vacuum-store', 'data'),
@@ -1216,15 +1217,14 @@ def register_callbacks(app, app_mod):
                     ch_u, mol_u, t_arr_u, relayout_data,
                     left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
                 )
-                # Rebuild means_data so update_fitted_states_table refreshes
+                # Rebuild fitted-states table so it reflects the restored means
                 means = app_mod.hmm_means.get(ch_u)
                 if means is not None and len(means) > 0:
-                    means_row = {str(p): (round(float(means[p]), 4) if p < len(means) else -1)
-                                 for p in range(10)}
-                    means_data = [means_row]
+                    tbl_cols = [{'id': f'S{i}', 'name': f'S{i}'} for i in range(len(means))]
+                    tbl_data = [{f'S{i}': round(float(m), 4) for i, m in enumerate(means)}]
                 else:
-                    means_data = []
-                return fig_u, segs_u, no_update, means_data
+                    tbl_cols, tbl_data = [], []
+                return fig_u, segs_u, no_update, tbl_cols, tbl_data
 
             else:
                 # ── Single-molecule undo: vacuum fill or boundary edit ────────
@@ -1242,7 +1242,7 @@ def register_callbacks(app, app_mod):
                     ch_u, mol_u, t_arr_u, relayout_data,
                     left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
                 )
-                return fig_u, segs_u, no_update, no_update  # means unchanged
+                return fig_u, segs_u, no_update, no_update, no_update  # table unchanged
 
         # Only act when the vacuum is fully defined (both boundaries chosen)
         if vacuum is None or vacuum.get('phase') != 'vacuum_ready':
@@ -1284,7 +1284,7 @@ def register_callbacks(app, app_mod):
             ch, mol, t_arr, relayout_data,
             left_mode=left_mode, left_cut=left_cut, right_cut=right_cut,
         )
-        return fig, new_segs, None, no_update   # clear vacuum; means unchanged
+        return fig, new_segs, None, no_update, no_update  # clear vacuum; table unchanged
 
     # ════════════════════════════════════════════════════════════════════════
     # Callback 5 — FITTED STATES SUMMARY TABLE
