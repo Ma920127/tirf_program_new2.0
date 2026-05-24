@@ -11,11 +11,11 @@ def tools_tab():
             # Row 1: Trace Visibility, Smoothing, and Mode Controls
             html.Div(
                 children=[
-                    html.Div('Hide Trace:', style={"margin-left": "60px", "padding": 5}),
+                    html.Div('Hide Trace:', style={"margin-left": "60px", "padding": 5, "white-space": "nowrap"}),
                     html.Div(
                         children=[
                             dcc.Checklist(
-                                ['BB', 'BG', 'BR', 'GG', 'GR', 'RR', 'FRET BG', 'FRET GR', 'Tot B', 'Tot G', 'HMM'],
+                                ['BB', 'BG', 'BR', 'GG', 'GR', 'RR', 'FRET BG', 'FRET GR', 'Tot B', 'Tot G'],
                                 ['Tot B', 'Tot G'],
                                 inline=True,
                                 inputStyle={"margin-left": "10px"},
@@ -23,24 +23,53 @@ def tools_tab():
                                 persistence=True
                             )
                         ],
-                        style={'padding': 5}
+                        style={'padding': 5, 'white-space': 'nowrap', 'flex-shrink': 0}
                     ),
-                    html.Div('Smoothing', style={"margin-left": "10px"}),
+                    
+                    # --- NEW SMOOTHING CONTROLS ---
+                    html.Div('Method:', style={"margin-left": "20px"}),
+                    dcc.Dropdown(
+                        id='smooth_method',
+                        options=[
+                            {'label': 'Moving Avg (uf)', 'value': 'moving'},
+                            {'label': 'Strided Avg (sa)', 'value': 'strided'},
+                            {'label': 'Median (mf)', 'value': 'median'},
+                            {'label': 'Savgol (sg)', 'value': 'savgol'}
+                        ],
+                        value='moving',
+                        clearable=False,
+                        searchable=False,
+                        style={"margin-left": "5px", "width": "160px"},
+                        persistence=True
+                    ),
+                    html.Div('Window:', style={"margin-left": "10px"}),
                     dcc.Input(
-                        1, type='number', min=1, step=1, id='smooth',
-                        persistence='True',
-                        style={"margin-left": "10px", "width": "50px"}
+                        id='smooth', type='number', value=1, min=1, step=1,
+                        persistence=True,
+                        style={"margin-left": "5px", "width": "60px"}
                     ),
+                    html.Div(
+                        id='poly-container',
+                        children=[
+                            html.Div('Order:', style={"margin-left": "10px"}),
+                            dcc.Input(
+                                id='polyorder', type='number', value=2, min=1,
+                                persistence=True,
+                                style={"margin-left": "5px", "width": "50px"}
+                            ),
+                        ],
+                        style={'display': 'none'}  # Controlled by app.py callback
+                    ),
+                    # ------------------------------
+
                     html.Div('Scatter:', style={"margin-left": "20px", "padding": 5}),
                     daq.ToggleSwitch(
                         id='scatter', value=0, color='green',
                         style={"margin-left": "10px", "padding": 5}
                     ),
-                    html.Div('Strided Smooth:', style={"margin-left": "20px", "padding": 5}),
-                    daq.ToggleSwitch(
-                        id='strided', value=0, color='green',
-                        style={"margin-left": "10px", "padding": 5}
-                    ),
+                    
+                    # Note: Original 'Strided Smooth' toggle removed since it's now in the Method Dropdown above
+                    
                     html.Div(
                         children=[
                             dcc.RadioItems(
@@ -50,11 +79,11 @@ def tools_tab():
                                 labelStyle={'display': 'inline-block', "marginTop": "5px"}
                             )
                         ],
-                        style={'padding': 5, "margin-left": "30%"}
+                        style={'padding': 30}
                     ),
                    
                 ],
-                style={'display': 'flex', 'flex-direction': 'row', 'align-items': 'center'}
+                style={'display': 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', 'align-items': 'center', 'width': '100%'}
             ),
 
             # Row 2: Navigation Buttons
@@ -104,7 +133,6 @@ def tools_tab():
                 children=[
                     html.Button('Save breakpoints', id='save_bkps'),
                     html.Button('Load breakpoints', id='load_bkps'),
-                    html.Button('Rupture', id='rupture', disabled=True),
                     html.Button('Rescale', id='rescale'),
                     dcc.Dropdown([], None, clearable=False, searchable=False,
                                  style={'width': '100px'}, id='channel')

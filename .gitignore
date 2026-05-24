@@ -11,3 +11,5 @@ env/
 
 # Ignore log files (like the app.log in your screenshot)
 *.log
+# Ignore claude file
+.claude

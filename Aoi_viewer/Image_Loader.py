@@ -236,7 +236,7 @@ class Image_Loader():
             if self.width != self.camera_size or self.height != self.camera_size:
                 raise ValueError(
                     f"Graph Size Mismatch! You selected {self.camera_size}x{self.camera_size} "
-                    f"in the tab, but the loaded data is actually {self.width}x{self.height}."
+                    f"in the tab, but the loaded data is actually {self.width}x{self.height}. Tell 🐎"
                 )
             
             filenumber=file[r'/vid/filenumber/'][:].flatten().astype('int')
@@ -565,7 +565,7 @@ class Image_Loader():
         if n_slices == None:
             if interval == None:
                 if anchors == None:
-                    raise Exception("Please provide either n_slices, interval, or anchors")
+                    raise Exception("Please provide either n_slices, interval, or anchors Tell 🐎")
                 else:
                     if isinstance(anchors, list):
                         anchors = anchors
@@ -573,16 +573,16 @@ class Image_Loader():
                         anchors = [anchors]
             else:
                 if not isinstance(interval, int):
-                    raise Exception("Please provide an interger interval.")
+                    raise Exception("Please provide an interger interval. Tell 🐎")
                 anchors = np.arange(0, length - 10, interval)
                 
         else:
             if not isinstance(n_slices, int):
-                raise Exception("Please provide interger slices.")
+                raise Exception("Please provide interger slices. Tell 🐎")
             anchors = np.linspace(0, length-10, n_slices).astype(int)
         
         if not np.any(anchors):
-                    raise Exception("Length too short!")
+                    raise Exception("Length too short! Tell 🐎")
 
         for anchor in tqdm(anchors):
             images = self.gen_dimg(anchor, mpath = None, maxf = 420, minf = 178, laser = laser, plot = False)

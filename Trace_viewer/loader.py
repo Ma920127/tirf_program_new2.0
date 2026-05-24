@@ -8,6 +8,8 @@ class Loader :
         self.path = path
     
     def load_traces(self):
+        if not os.path.exists(self.path + r'\data.npz'):
+            raise FileNotFoundError(f"data.npz not found at '{self.path}'. Tell 🐎")
         Q1 = np.load(self.path+r'\data.npz')
 
         fret_g = Q1['fret_g']
@@ -61,10 +63,20 @@ class Loader :
         except:
             blobs = None
         
+        # Try new unified hmm.npz (same level as data.npz) first
         try:
-            hmm_fret_g = np.load(self.path + r'\HMM_traces\hmm.npz', allow_pickle=True)['hd_states']
-        except:
-            hmm_fret_g = np.zeros_like(fret_g)
+            _hmm = np.load(self.path + r'\hmm.npz', allow_pickle=True)['data'].item()
+            hmm_fret_g = _hmm.get('fret_g', {}).get('hd_states', np.zeros_like(fret_g))
+        except Exception:
+            # Fall back to legacy HMM_traces location
+            try:
+                _hmm = np.load(self.path + r'\HMM_traces\hmm.npz', allow_pickle=True)['data'].item()
+                hmm_fret_g = _hmm.get('fret_g', {}).get('hd_states', np.zeros_like(fret_g))
+            except Exception:
+                try:
+                    hmm_fret_g = np.load(self.path + r'\HMM_traces\hmm_fret_g.npz', allow_pickle=True)['hd_states']
+                except Exception:
+                    hmm_fret_g = np.full(fret_g.shape, None, dtype=object)
 
 
         ch_label = []

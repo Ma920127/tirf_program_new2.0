@@ -1,4 +1,6 @@
 @echo off
+chcp 65001
+set PYTHONUTF8=1
 REM Open Chrome with a new tab for the Aoi viewer.
 start chrome.exe --new-tab http://127.0.0.1:8042/
 

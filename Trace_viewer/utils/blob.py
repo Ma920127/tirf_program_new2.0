@@ -84,7 +84,7 @@ def get_index_from_time_jit(t_array, t_val, smooth, est):
     return idx
 
 
-def show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, strided):
+def show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, smooth_method, polyorder=2):
     """
     Update the blob figure based on hover data and AOI settings.
     Uses the Numba-accelerated binary search for fast time indexing.
@@ -92,14 +92,14 @@ def show_blob(blobs, fig_blob, smooth, i, hoverData, time, aoi_max, strided):
     if blobs is None or hoverData is None:
         return fig_blob
     
+    # Determine if strided smoothing is active to fix the index scaling
+    strided = (smooth_method == 'strided')
     
     trans = {
         0: 'g', 1: 'b', 2: 'b', 3: 'b', 4: 'b', 5: 'b',
         6: 'g', 7: 'g', 8: 'g', 9: 'r', 10: 'g', 11: 'b', 12: 'b', 13: 'g', 14: 'r'
     }
 
-
-    
     # Get the time value from hover data
     try:
         t = hoverData["points"][0]["x"]
