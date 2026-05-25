@@ -1,7 +1,8 @@
 import numpy as np
 
 
-def _extract_dwells(states_2d, t_arr, left_mode, left_cut, dead_time_s, right_cut):
+def _extract_dwells(states_2d, t_arr, left_mode, left_cut, dead_time_s, right_cut,
+                    censor_last=False):
     """
     Extract dwell times from a 2D HMM state array and apply boundary cuts.
 
@@ -18,21 +19,24 @@ def _extract_dwells(states_2d, t_arr, left_mode, left_cut, dead_time_s, right_cu
     left_cut    : int   — number of dwells to skip from the left (cut mode)
     dead_time_s : float — seconds to add to the first dwell (dead time mode)
     right_cut   : int   — number of dwells to skip from the right (both modes)
+    censor_last : bool  — when True, any dwell whose end time equals the
+                          channel recording maximum (t_arr[-1]) is marked
+                          observed = 0 (right-censored) instead of 1.
 
     Returns
     -------
     dwell_dict  : dict  { str(state) → np.ndarray of dwell durations (seconds) }
-    events_dict : dict  { str(state) → np.ndarray of 1s (all stored dwells are
-                          complete observed events) }
+    events_dict : dict  { str(state) → np.ndarray of 1s/0s
+                          1 = complete observed event, 0 = right-censored }
 
     Notes
     -----
-    - All surviving dwells are stored with event = 1 (no censoring).
     - Cut dwells are excluded entirely — not stored, no event flag.
     - Duration of each dwell is inclusive of the last frame:
         duration = t_arr[f_end] - t_arr[f_start] + dt
     """
-    dt = float(t_arr[1] - t_arr[0]) if len(t_arr) > 1 else 1.0
+    dt       = float(t_arr[1] - t_arr[0]) if len(t_arr) > 1 else 1.0
+    max_time = float(t_arr[-1])           # recording end — identical for all states
 
     dwell_dict  = {}   # { str(state): [float, ...] }
     events_dict = {}   # { str(state): [1, ...] }
@@ -100,8 +104,9 @@ def _extract_dwells(states_2d, t_arr, left_mode, left_cut, dead_time_s, right_cu
                 duration += float(dead_time_s)
 
             state_key = str(state)
+            observed  = 0 if (censor_last and np.isclose(t_e, max_time)) else 1
             dwell_dict.setdefault(state_key,  []).append(duration)
-            events_dict.setdefault(state_key, []).append(1)
+            events_dict.setdefault(state_key, []).append(observed)
 
     # ── Convert lists to numpy arrays ─────────────────────────────────────
     for key in dwell_dict:

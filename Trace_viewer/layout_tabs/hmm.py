@@ -467,7 +467,36 @@ def hmm_tab():
 
                         html.Hr(className="my-3"),
 
-                        html.H5("Dwell Manager", className="mb-3 font-weight-bold"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H5("Dwell Manager", className="mb-0 font-weight-bold"),
+                            ], width=7, style={'display': 'flex', 'alignItems': 'center'}),
+                            dbc.Col([
+                                html.Div([
+                                    dbc.Label(
+                                        "Max Censor",
+                                        style={'marginRight': '8px', 'marginBottom': '0'},
+                                    ),
+                                    daq.ToggleSwitch(
+                                        id='dwell-censor-last',
+                                        value=False,
+                                        color='#4C72B0',
+                                        style={'display': 'inline-block'},
+                                    ),
+                                    html.Span(
+                                        id='dwell-censor-last-label',
+                                        children='OFF',
+                                        style={
+                                            'marginLeft':    '8px',
+                                            'fontWeight':    'bold',
+                                            'fontSize':      '13px',
+                                            'color':         '#868e96',
+                                            'verticalAlign': 'middle',
+                                        }
+                                    ),
+                                ], style={'display': 'flex', 'alignItems': 'center'}),
+                            ], width=5, style={'paddingLeft': '12px'}),
+                        ], className="mb-2 align-items-center"),
 
                         dbc.Row([
 

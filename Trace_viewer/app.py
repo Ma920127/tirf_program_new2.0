@@ -488,6 +488,19 @@ def selected_filter_label(on):
     return 'OFF', {**base, 'color': '#868e96'}
 
 
+@app.callback(
+    Output('dwell-censor-last-label', 'children'),
+    Output('dwell-censor-last-label', 'style'),
+    Input('dwell-censor-last', 'value'),
+)
+def censor_last_label(on):
+    base = {'fontSize': '13px', 'fontWeight': 'bold', 'marginLeft': '8px',
+            'verticalAlign': 'middle'}
+    if on:
+        return 'ON',  {**base, 'color': '#4C72B0'}
+    return 'OFF', {**base, 'color': '#868e96'}
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 5.  RR sub-toggle → enable / disable the RR threshold input (fret_g panel)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1391,9 +1404,11 @@ def hmm_save_npz(n_clicks, path):
     State('dwell-left-cut',      'value'),
     State('dwell-left-deadtime', 'value'),
     State('dwell-right-cut',     'value'),
+    State('dwell-censor-last',   'value'),
     prevent_initial_call=True,
 )
-def hmm_save_dwell(n_clicks, path, channel, left_mode, left_cut, dead_time, right_cut):
+def hmm_save_dwell(n_clicks, path, channel, left_mode, left_cut, dead_time, right_cut,
+                   censor_last):
     if not n_clicks:
         raise PreventUpdate
     if not path:
@@ -1417,6 +1432,7 @@ def hmm_save_dwell(n_clicks, path, channel, left_mode, left_cut, dead_time, righ
         left_cut=left_cut_n,
         dead_time_s=dead_time_s,
         right_cut=right_cut_n,
+        censor_last=bool(censor_last),
     )
 
     if not dwell_dict:
