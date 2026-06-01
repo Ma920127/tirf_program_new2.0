@@ -128,7 +128,12 @@ def apply_drift_correction(target_channel, path, time_reference, time_target, dr
 
         start = end
 
-    last_valid_frame = np.max(np.nonzero(cumulative_drift[:, 0]))
+    nonzero_frames = np.nonzero(cumulative_drift[:, 0])
+    if len(nonzero_frames[0]) == 0:
+        print(f"🐎 say no drift detected, {target_channel} return original graph...")
+        logging.warning("No drift detected — cumulative drift is all zeros. Returning original image stack.")
+        return image_stack.copy()
+    last_valid_frame = np.max(nonzero_frames)
     cumulative_drift[last_valid_frame + 1:] = cumulative_drift[last_valid_frame]
 
     # Plot cumulative drift
