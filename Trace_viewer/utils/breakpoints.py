@@ -31,7 +31,10 @@ def breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smoot
 
     if 'dtime' in changed_id:
         if channel is not None:
-            smoothed_time = sm(time[channel], smooth) # Removed the trailing 0
+            if smooth_mode == 'strided':
+                smoothed_time = sm(time[channel], smooth)
+            else:
+                smoothed_time = time[channel]
         else:
             print(1)
             channel_error_show = True
@@ -50,7 +53,10 @@ def breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smoot
 
     if 'etime' in changed_id:
         if channel is not None:
-            smoothed_time = sm(time[channel], smooth) # Removed the trailing 0
+            if smooth_mode == 'strided':
+                smoothed_time = sm(time[channel], smooth)
+            else:
+                smoothed_time = time[channel]
         else:
             channel_error_show = True
             return bkps, mode, confirm_reset_show, channel_error_show
@@ -68,7 +74,10 @@ def breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smoot
             c_num = clickData["points"][0]["curveNumber"]
             channel = trans[c_num]
             # Re-smooth time for the new channel context
-            smoothed_time = sm(time[channel], smooth) # Removed the trailing 0
+            if smooth_mode == 'strided':
+                smoothed_time = sm(time[channel], smooth)
+            else:
+                smoothed_time = time[channel]
             if mode == 'Add':
                 if c_num < 10:
                     idx = clickData["points"][0]["pointNumber"]
@@ -220,7 +229,10 @@ def find_chp(changed_id, fret_g, fret_b, rr, gg, gr, bb, bg, br, i, time, select
 
     # Apply smoothing on the chosen signal AND time
     smoothed_signal = sm(signal, smooth)
-    smoothed_time = sm(time[channel], smooth)
+    if smooth_mode == 'strided':
+        smoothed_time = sm(time[channel], smooth)
+    else:
+        smoothed_time = time[channel]
 
     # Process each trace index in i_list. 
     for j in i_list:

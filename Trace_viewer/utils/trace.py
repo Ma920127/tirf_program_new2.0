@@ -55,7 +55,7 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
     # ---------------------------
     if np.any(fret_b):
         # Pre-calculate smoothed arrays to improve performance
-        sm_time_b = sm(time['b'], lag)
+        sm_time_b = sm(time['b'], lag) if smooth_mode == 'strided' else time['b']
         sm_fret_b = sm(fret_b[i], lag)
         sm_bb = sm(bb[i], lag)
         sm_bg = sm(bg[i], lag)
@@ -91,7 +91,7 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
     # Update Green Channel (fret_g) and associated signals.
     # ---------------------------
     if np.any(fret_g):
-        sm_time_g = sm(time['g'], lag)
+        sm_time_g = sm(time['g'], lag) if smooth_mode == 'strided' else time['g']
         sm_fret_g = sm(fret_g[i], lag)
         sm_gg = sm(gg[i], lag)
         sm_gr = sm(gr[i], lag)
@@ -129,7 +129,7 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
     # Update Red Channel (rr) signals.
     # ---------------------------
     if np.any(rr):
-        sm_time_r = sm(time['r'], lag)
+        sm_time_r = sm(time['r'], lag) if smooth_mode == 'strided' else time['r']
         sm_rr = sm(rr[i], lag)
 
         fig.update_traces(x=sm_time_r, y=sm_rr, mode=mode_dict[scatter], visible=('RR' not in show), selector=dict(name='rr'))
@@ -193,9 +193,9 @@ def update_trace(fig, relayout, i, scatter, fret_g, fret_b, rr, gg, gr, bb, bg, 
                     y_ax = yaxis_map.get(channel, 'y1')
 
                     # 4. Apply smoothing to align with visual line
-                    if smooth_mode == 'moving': sm_time, sm_sig = uf(t_arr, lag), uf(y_arr, lag)
-                    elif smooth_mode == 'median': sm_time, sm_sig = mf(t_arr, lag), mf(y_arr, lag)
-                    elif smooth_mode == 'savgol': sm_time, sm_sig = sg(t_arr, lag, polyorder), sg(y_arr, lag, polyorder)
+                    if smooth_mode == 'moving': sm_time, sm_sig = t_arr, uf(y_arr, lag)
+                    elif smooth_mode == 'median': sm_time, sm_sig = t_arr, mf(y_arr, lag)
+                    elif smooth_mode == 'savgol': sm_time, sm_sig = t_arr, sg(y_arr, lag, polyorder)
                     elif smooth_mode == 'strided': sm_time, sm_sig = sa(t_arr, lag), sa(y_arr, lag)
                     else: sm_time, sm_sig = t_arr, y_arr
 
