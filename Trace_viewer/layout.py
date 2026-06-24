@@ -68,9 +68,9 @@ def make_app(fig, fig_blob, fig2):
                         },
                         config={'displayModeBar': False, 'scrollZoom': False},
                         style={
-                            'width':      'calc(90% - 90px)',
+                            'width':      'calc(90% - 87px)',
                             'height':     '50px',
-                            'marginLeft': '80px',
+                            'marginLeft': '78.5px',
                             'border':     '1.5px solid #888',
                             'borderRadius': '3px',
                             'overflow':   'hidden',

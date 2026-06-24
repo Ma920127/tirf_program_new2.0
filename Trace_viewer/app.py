@@ -215,6 +215,9 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     if 'n_events' in changed_id and event.get('key') in ('q', 'w') and new_i == old_i:
         raise PreventUpdate()
 
+    if new_i != old_i:
+        fig['layout']['uirevision'] = f"trace_{new_i}"
+
     ##select good bad##
     select_list_g = select_good_bad(changed_id, event, i, select_list_g)
     colocalized_list = select_colocalized(changed_id, event, i, colocalized_list)
@@ -314,8 +317,13 @@ def update_fig(key_events, show, next, previous, go, dtime, etime, clickData, mo
     # re-triggering render_hmm_bar (and other i-watchers) on zoom/pan events.
     # Only re-emit relayoutData on explicit rescale so the HMM bar isn't
     # woken up again after update_fig finishes, which would override the zoom.
-    i_out = i if new_i != old_i else no_update
+    if 'loadp' in changed_id or new_i != old_i:
+        i_out = i
+    else:
+        i_out = no_update
+    
     relayout_out = relayout if 'rescale' in changed_id else no_update
+
     return fig, i_out, str_g_bkps, str_b_bkps, mode, nnote, good_style, bad_style, colocalized_style, ch_label, ch_label, ch_label, confirm_reset_show, channel_error_show, relayout_out
 
 
@@ -731,10 +739,28 @@ def HMM(start, w, fit, cov_type, means, epoch, n_iter, channel, path,
             if v >= 0:
                 init_means.append(v)
 
-    if not init_means:
-        raise PreventUpdate()
+    # 1. Sense if model.pkl is present in the folder
+    model_path = os.path.join(path, 'model.pkl')
+    model_exists = os.path.exists(model_path)
+
+    # 2. Check if the user turned the Train toggle ON or OFF
+    if fit: 
+        # Train is ON: User MUST input initial means to train a new model
+        if not init_means:
+            print("🐎 say put initial mean on the sheet first !!!")
+            raise PreventUpdate()
+    else: 
+        # Train is OFF: We want to load the existing model
+        if not model_exists:
+            print(f"🐎 say 'model.pkl' is missing in {path}!")
+            raise PreventUpdate() # Stop the code before it crashes
+            
+        # 3. Skip the input requirement! Provide a safe dummy value so the prediction can run.
+        if not init_means:
+            init_means = [0.5] 
+
     init_means = np.array(init_means).reshape(-1, 1)
-    print(init_means)
+    print("Initial Means array:", init_means)
 
     poly = int(polyorder) if polyorder else 2
     hfit = HMM_fitter(path)

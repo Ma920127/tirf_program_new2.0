@@ -324,9 +324,15 @@ def make_hmm_bar_figure(segments, view_start, view_end, selected_boundary=-1,
     seg_owner = [-1] * n_pts
     for k, seg in enumerate(segments):
         t_lo = float(seg['t_start'])
-        t_hi = (float(segments[k + 1]['t_start'])
-                if k + 1 < len(segments)
-                else float(seg['t_end']) + 1e-9)
+        if k > 0:
+            t_lo = (float(segments[k - 1]['t_end']) + t_lo) / 2.0
+            
+        t_hi = float(seg['t_end'])
+        if k + 1 < len(segments):
+            t_hi = (t_hi + float(segments[k + 1]['t_start'])) / 2.0
+        else:
+            t_hi += 1e-9
+
         for p, x in enumerate(x_pts):
             if t_lo <= x < t_hi:
                 seg_owner[p] = k
@@ -343,17 +349,50 @@ def make_hmm_bar_figure(segments, view_start, view_end, selected_boundary=-1,
     # Pre-compute vacuum clipped range for annotation suppression
     vac_ts = vac_te = None
     if vacuum_t is not None:
-        vac_ts = max(float(vacuum_t[0]), view_start)
-        vac_te = min(float(vacuum_t[1]), view_end)
+        raw_vac_start = float(vacuum_t[0])
+        raw_vac_end = float(vacuum_t[1])
+        
+        # 1. Align the LEFT boundary independently with the exact segment midpoint
+        for k, seg in enumerate(segments):
+            if abs(float(seg['t_start']) - raw_vac_start) < 1e-7:
+                if k > 0:
+                    raw_vac_start = (float(segments[k - 1]['t_end']) + float(seg['t_start'])) / 2.0
+                break
+            elif abs(float(seg['t_end']) - raw_vac_start) < 1e-7:
+                if k + 1 < len(segments):
+                    raw_vac_start = (float(seg['t_end']) + float(segments[k + 1]['t_start'])) / 2.0
+                break
+                
+        # 2. Align the RIGHT boundary independently with the exact segment midpoint
+        for k, seg in enumerate(segments):
+            if abs(float(seg['t_end']) - raw_vac_end) < 1e-7:
+                if k + 1 < len(segments):
+                    raw_vac_end = (float(seg['t_end']) + float(segments[k + 1]['t_start'])) / 2.0
+                break
+            elif abs(float(seg['t_start']) - raw_vac_end) < 1e-7:
+                if k > 0:
+                    raw_vac_end = (float(segments[k - 1]['t_end']) + float(seg['t_start'])) / 2.0
+                break
+
+        vac_ts = max(raw_vac_start, view_start)
+        vac_te = min(raw_vac_end, view_end)
         if vac_te <= vac_ts:
             vac_ts = vac_te = None   # vacuum fully outside view — ignore
 
     shapes, annotations = [], []
     for k, seg in enumerate(segments):
-        ts = max(seg['t_start'], view_start)
-        # Extend to next segment's start to eliminate one-frame visual gaps
-        raw_end = (float(segments[k + 1]['t_start'])
-                   if k + 1 < len(segments) else float(seg['t_end']))
+        # Calculate midpoint for the start of the block
+        raw_start = float(seg['t_start'])
+        if k > 0:
+            raw_start = (float(segments[k - 1]['t_end']) + raw_start) / 2.0
+            
+        # Calculate midpoint for the end of the block
+        raw_end = float(seg['t_end'])
+        if k + 1 < len(segments):
+            raw_end = (raw_end + float(segments[k + 1]['t_start'])) / 2.0
+        
+        # Apply view boundaries
+        ts = max(raw_start, view_start)
         te = min(raw_end, view_end)
         if te <= ts:
             continue
@@ -395,7 +434,9 @@ def make_hmm_bar_figure(segments, view_start, view_end, selected_boundary=-1,
 
     # Boundary lines — appended AFTER all fill shapes (important for JS shape indexing)
     for j in range(1, len(segments)):
-        t_b = segments[j]['t_start']
+        # Force the vertical line to draw exactly on the midpoint
+        t_b = (float(segments[j - 1]['t_end']) + float(segments[j]['t_start'])) / 2.0
+        
         if not (view_start <= t_b <= view_end):
             continue
         selected = (j - 1 == selected_boundary)
@@ -548,6 +589,13 @@ def register_callbacks(app, app_mod):
                        selected_boundary, vacuum_data):
         if active_tab != 'HMM':
             raise PreventUpdate
+
+        # Ignore tool clicks (like Pen) that don't have zoom data ---
+        ctx = callback_context
+        triggered = ctx.triggered[0]['prop_id'] if ctx.triggered else ''
+        if triggered == 'graph.relayoutData' and relayout_data:
+            if 'dragmode' in relayout_data and 'xaxis.range[0]' not in relayout_data:
+                raise PreventUpdate
 
         ch = channel or 'fret_g'
         time_key = CHANNEL_TIME_KEY.get(ch, 'fret_g')

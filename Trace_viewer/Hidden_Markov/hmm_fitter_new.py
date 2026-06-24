@@ -431,15 +431,8 @@ class HMM_fitter:
             with open(self.path + r"\model.pkl", "wb") as f:
                 pickle.dump(model, f)
         else:
-            model = GaussianHMM(
-                n_components=k, n_iter=10, verbose=True, min_covar=100,
-                covariance_type=covariance_type, covars_prior=0.001,
-                transmat_prior=0, init_params='stc', params=params
-            )
             with open(self.path + r"\model.pkl", "rb") as f:
                 model = pickle.load(f)
-            #with open(r'H:\TIRF\20221229\lane3\dmc1\320s\FRET\0'+r"\model.pkl", "rb") as f: model=pickle.load(f)
-            #with open(r'H:\TIRF\20221229\lane2\dmc1\530s\FRET\0'+r"\model.pkl", "rb") as f: model=pickle.load(f)
 
         self.mus = np.array(model.means_)
         sigmas = np.array(model.covars_)
