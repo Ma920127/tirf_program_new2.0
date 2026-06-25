@@ -45,7 +45,7 @@ def y_affine(xy,a2,b2,c2):
 
 
 # need change
-path = r'E:\Map_file\512_512\20260325\map1'
+path = r'E:\Map_file\1024_1024\20260625\Map1'
 modes = ['g', 'b']
 thres = 0.25
 # if blob can't detect any blob, decrease the thres value
