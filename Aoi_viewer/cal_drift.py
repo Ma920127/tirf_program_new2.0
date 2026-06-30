@@ -14,7 +14,6 @@ from tqdm import tqdm
 def gaussian(x, amp, mu, sigma):
     return amp * np.exp(-(x - mu)**2 / (2 * sigma**2))
 
-
 def estimate_robust_gaussian_drift(displacements, interval_idx, drifts_dir, max_ratio=2.0):
     drift = np.zeros(2)
     labels = ['X', 'Y']
@@ -26,13 +25,28 @@ def estimate_robust_gaussian_drift(displacements, interval_idx, drifts_dir, max_
         data = displacements[:, dim]
         med = np.median(data)
         mad = median_abs_deviation(data)
-        mask = (data > med - 3 * mad) & (data < med + 3 * mad)
+        
+        # FIX 1: If mad is 0 (all points are identical), don't filter anything out
+        if mad == 0:
+            mask = np.ones_like(data, dtype=bool)
+        else:
+            mask = (data > med - 3 * mad) & (data < med + 3 * mad)
         filtered_data = data[mask]
 
         hist, bin_edges = np.histogram(filtered_data, bins=30)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
         ax.hist(filtered_data, bins=20, color=color, edgecolor='black', alpha=0.6, label=f'{label} drift')
+
+        # FIX 2: If filtered_data is empty or standard deviation is 0, curve_fit will fail or produce NaNs.
+        # Fall back to the median immediately.
+        if len(filtered_data) == 0 or filtered_data.std() == 0:
+            drift[dim] = med
+            ax.set_title(f'Interval {interval_idx} - Drift {label} (Used median fallback)')
+            ax.set_xlabel(f'Drift {label} (pixels)')
+            ax.set_ylabel('Frequency')
+            ax.legend()
+            continue
 
         try:
             popt, _ = curve_fit(
@@ -41,17 +55,18 @@ def estimate_robust_gaussian_drift(displacements, interval_idx, drifts_dir, max_
                 maxfev=5000
             )
             fitted_mean = popt[1]
-            if np.abs(fitted_mean - med) / (mad + 1e-9) > max_ratio:
+            # FIX 3: Also check if fitted_mean is NaN to avoid propagating NaN drifts
+            if np.isnan(fitted_mean) or np.abs(fitted_mean - med) / (mad + 1e-9) > max_ratio:
                 drift[dim] = med
-                ax.set_title(f'Interval {interval_idx} - Drift {label} (Used median due to large deviation)')
-                print(f'Used median for dimension {label} in interval {interval_idx} due to large deviation.')
+                ax.set_title(f'Interval {interval_idx} - Drift {label} (Used median due to deviation/NaN)')
+                print(f'Used median for dimension {label} in interval {interval_idx} due to large deviation or NaN.')
             else:
                 drift[dim] = fitted_mean
                 x_fit = np.linspace(bin_centers.min(), bin_centers.max(), 100)
                 y_fit = gaussian(x_fit, *popt)
                 ax.plot(x_fit, y_fit, color='black', linestyle='--', label=f'Gaussian fit')
                 ax.set_title(f'Interval {interval_idx} - Drift {label}')
-        except RuntimeError:
+        except (RuntimeError, ValueError):
             drift[dim] = med
             ax.set_title(f'Interval {interval_idx} - Drift {label} (Used median fallback)')
             print(f'Used median fallback for dimension {label} in interval {interval_idx}')
@@ -66,7 +81,6 @@ def estimate_robust_gaussian_drift(displacements, interval_idx, drifts_dir, max_
     plt.close()
 
     return drift
-
 
 
 # Drift tracking
@@ -105,15 +119,19 @@ def track_and_plot_drift(loader, image_stack, fsc, mpath, path, maxf=1500, minf=
     logging.info("Drift estimated successfully.")
     return drift_history
 
-# Calculate cumulative drift per interval
-def apply_drift_correction(target_channel, path, time_reference, time_target, drift_history, image_stack):
+# Calculate cumulative drift per interval (With Sparse/Late Frame Protection & CMD Warning)
+def apply_drift_correction(target_channel, path, time_reference, time_target, drift_history, image_stack, per_n=200):
     cumulative_drift = np.zeros((image_stack.shape[0], 2))
     total_drift = np.zeros(2)
     logging.info(f"Applying Drift correction to {target_channel} channel")
     start = 0
+    last_processed_frame = 0  # Track where the last interval left off
+    
     for i, (anchor, drift_vec) in enumerate(drift_history):
         end = anchor if i == 0 else drift_history[i][0]
-        per_sec_drift = drift_vec / (time_reference[end] - time_reference[start])
+        
+        time_diff = time_reference[end] - time_reference[start]
+        per_sec_drift = drift_vec / time_diff if time_diff > 0 else np.zeros(2)
 
         start_frame_target = np.searchsorted(time_target, time_reference[start], side='left')+1
         end_frame_target = np.searchsorted(time_target, time_reference[end], side='left')+1
@@ -121,10 +139,32 @@ def apply_drift_correction(target_channel, path, time_reference, time_target, dr
         start_frame_target = min(start_frame_target, image_stack.shape[0] - 1)
         end_frame_target = min(end_frame_target, image_stack.shape[0] - 1)
 
-        for frame in range(start_frame_target, end_frame_target):
-            drift_step = per_sec_drift * (time_target[frame + 1] - time_target[frame])
-            total_drift += drift_step
-            cumulative_drift[frame + 1] = total_drift
+        if start_frame_target == end_frame_target:
+            # ⚠️ Print warning to cmd if channel is missing frames in this window but has many total frames
+            if image_stack.shape[0] > per_n:
+                print(f"🐎⚠️ WARNING: Channel '{target_channel}' has NO frames in the reference interval {start} to {end} "
+                      f"even though its total frame count ({image_stack.shape[0]}) is larger than per_n ({per_n})!")
+                logging.warning(f"Channel '{target_channel}' missing frames in reference interval {start}->{end} "
+                                f"despite having {image_stack.shape[0]} total frames.")
+
+            total_drift += drift_vec
+            # FIX 4: Fill unassigned gap frames only from last_processed_frame, do not overwrite history from 0
+            if start_frame_target > last_processed_frame:
+                cumulative_drift[last_processed_frame:start_frame_target + 1] = total_drift
+            else:
+                cumulative_drift[start_frame_target] = total_drift
+            last_processed_frame = start_frame_target + 1
+        else:
+            # FIX 5: Fill gaps up to start_frame_target safely without overwriting previous history
+            if start_frame_target > last_processed_frame:
+                cumulative_drift[last_processed_frame:start_frame_target] = total_drift
+                
+            for frame in range(start_frame_target, end_frame_target):
+                drift_step = per_sec_drift * (time_target[frame + 1] - time_target[frame])
+                total_drift += drift_step
+                cumulative_drift[frame + 1] = total_drift
+                
+            last_processed_frame = end_frame_target
 
         start = end
 
@@ -195,6 +235,7 @@ def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, cha
             time_target = time_dict['green'],
             drift_history = drift_history,
             image_stack = gs.image_g,
+            per_n = per_n
         )
         gs.image_g = warped_green
         gs.loader.image_g = warped_green
@@ -210,6 +251,7 @@ def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, cha
             time_target =  time_dict['blue'],
             drift_history = drift_history,
             image_stack = gs.image_b,
+            per_n = per_n
         )
         gs.image_b = warped_blue
         gs.loader.image_b = warped_blue
@@ -223,6 +265,7 @@ def cal_drift(gs, channel_dict, fsc, mpath, path, maxf, minf, average_frame, cha
             time_target =  time_dict['red'],
             drift_history = drift_history,
             image_stack = gs.image_r,
+            per_n = per_n
         )
         gs.image_r = warped_red
         gs.loader.image_r = warped_red
