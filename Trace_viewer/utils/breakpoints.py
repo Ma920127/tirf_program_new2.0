@@ -156,8 +156,10 @@ def sl_bkps(changed_id, path, bkps, mode):
         print('file_saved')
     if 'load_bkps' in changed_id:
         try:
-            bkps = dict(np.load(path + r'/breakpoints.npz', allow_pickle=True))
-            #print(bkps['fret_g'])
+            loaded_bkps = dict(np.load(path + r'/breakpoints.npz', allow_pickle=True))
+            # Convert the loaded arrays back into Python lists
+            for key in loaded_bkps:
+                bkps[key] = loaded_bkps[key].tolist()
         except Exception as e:
             print(f"breakpoints.npz not found or corrupted at '{path}': {e}. Tell 🐎")
     return bkps
