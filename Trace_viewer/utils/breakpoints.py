@@ -138,7 +138,6 @@ def breakpoints_utils(changed_id, clickData, mode, channel, i, time, bkps, smoot
                 
     return bkps, mode, confirm_reset_show, channel_error_show
 
-
 def sl_bkps(changed_id, path, bkps, mode):
     if ('save_bkps' in changed_id) or (mode == 'Clear All'):
         mode = 'Add'
@@ -150,18 +149,23 @@ def sl_bkps(changed_id, path, bkps, mode):
             print('No existing save file found.')
         if not path:
             raise ValueError("No folder path loaded — cannot save breakpoints. Tell 🐎")
+        
+        # FIX: Create a temporary dictionary for saving so the live data remains as lists
+        save_dict = {}
         for key in bkps:
-            bkps[key] = np.array(bkps[key], dtype=object)
-        np.savez(path + r'/breakpoints.npz', **bkps)
+            save_dict[key] = np.array(bkps[key], dtype=object)
+        np.savez(path + r'/breakpoints.npz', **save_dict)
         print('file_saved')
+        
     if 'load_bkps' in changed_id:
         try:
             loaded_bkps = dict(np.load(path + r'/breakpoints.npz', allow_pickle=True))
-            # Convert the loaded arrays back into Python lists
+            # FIX: Ensure loaded data is converted back to Python lists
             for key in loaded_bkps:
                 bkps[key] = loaded_bkps[key].tolist()
         except Exception as e:
             print(f"breakpoints.npz not found or corrupted at '{path}': {e}. Tell 🐎")
+            
     return bkps
 
 
